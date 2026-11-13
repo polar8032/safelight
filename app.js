@@ -132,9 +132,15 @@ const imgCache = new Map();
 const ph = () => S.photos.find(p => p.id === S.cur);
 const P = () => ph() && ph().edits;
 
-function toast(msg, ms = 2600) {
-  document.querySelectorAll('.toast').forEach(x => x.remove()); const t = h('div', { class: 'toast', role: 'status', text: msg }); document.body.appendChild(t); setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 240); }, ms);
+function toast(msg, ms = 2600, action) {
+  document.querySelectorAll('.toast').forEach(x => x.remove());
+  const t = h('div', { class: 'toast', role: 'status' }, h('span', { text: msg }));
+  const close = () => { t.classList.add('out'); setTimeout(() => t.remove(), 240); };
+  if (action) t.append(h('button', { class: 'btn sm tact', onclick: () => { close(); action.fn(); } }, action.label));
+  document.body.appendChild(t); setTimeout(close, action ? Math.max(ms, 6000) : ms);
 }
+const live = () => S.photos.filter(p => !p.deleted);
+const selIds = () => [...S.sel].filter(id => S.photos.some(p => p.id === id));
 const saveTimers = new Map();
 function savePhoto(p, now) {
   clearTimeout(saveTimers.get(p.id));
@@ -226,6 +232,8 @@ function matchesSmart(p, r) {
 function visiblePhotos() {
   const src = S.source, f = S.filter;
   let list = S.photos.filter(p => {
+    if (src.kind === 'trash') return !!p.deleted;
+    if (p.deleted) return false;
     if (src.kind === 'import' && p.batch !== S.lastImport) return false;
     if (src.kind === 'picks' && p.flag !== 1) return false;
     if (src.kind === 'edited' && !isEdited(p.edits)) return false;
@@ -246,7 +254,7 @@ function visiblePhotos() {
 
 /* ============================== shell ============================== */
 function setView(v) {
-  if (v === 'edit' && !ph()) { const l = visiblePhotos(); if (!l.length) { toast('Import a photo first.'); return; } S.cur = l[0].id; S.sel = new Set([S.cur]); }
+  if (v === 'edit' && (!ph() || ph().deleted)) { if (S.source.kind === 'trash') S.source = { kind: 'all' }; S.cur = null; const l = visiblePhotos(); if (!l.length) { toast('Import a photo first.'); return; } S.cur = l[0].id; S.sel = new Set([S.cur]); }
   if (S.view === 'edit' && v !== 'edit') finishEditing();
   S.view = v; S.tool = null; S.picking = null;
   $('#mLib').classList.toggle('on', v === 'library'); $('#mEdit').classList.toggle('on', v === 'edit');
@@ -275,30 +283,59 @@ const SEC_TAB = { catalog: 'albums', cols: 'albums', kw: 'albums', quick: 'info'
 /* ============================== library: left ============================== */
 function renderLibLeft() {
   const L = $('#left'); L.innerHTML = '';
-  const n = (fn) => S.photos.filter(fn).length;
-  const item = (label, src, count, extra) => h('button', { class: 'li' + (S.source.kind === src.kind && S.source.id === src.id ? ' on' : ''), onclick: () => { S.source = src; renderAll(); } }, h('span', { class: 't', text: label }), h('span', { class: 'n', text: count }), extra || null);
-  L.append(section('catalog', 'Catalog', h('div', { class: 'list' },
-    item('All photographs', { kind: 'all' }, S.photos.length),
+  const lp = live(), n = (fn) => lp.filter(fn).length;
+  const go = (src) => { S.source = src; if (isMobile()) S.mtab = 'photos'; renderAll(); };
+  const item = (label, src, count, extra, icon) => {
+    const on = S.source.kind === src.kind && S.source.id === src.id;
+    const b = h('button', { class: 'li' + (on ? ' on' : ''), onclick: () => go(src) }, icon || null, h('span', { class: 't', text: label }), h('span', { class: 'n', text: count }), extra || null);
+    if (src.kind === 'col') acceptPhotoDrop(b, src.id);
+    return b;
+  };
+  const trashN = S.photos.filter(p => p.deleted).length;
+  L.append(section('catalog', 'Library', h('div', { class: 'list' },
+    item('All photos', { kind: 'all' }, lp.length),
     item('Previous import', { kind: 'import' }, n(p => p.batch === S.lastImport)),
     item('Picks', { kind: 'picks' }, n(p => p.flag === 1)),
-    item('Edited', { kind: 'edited' }, n(p => isEdited(p.edits)))
+    item('Edited', { kind: 'edited' }, n(p => isEdited(p.edits))),
+    item('Recently deleted', { kind: 'trash' }, trashN)
   )));
-  const cols = S.collections.map(c => item((c.smart ? '◇ ' : '▫ ') + c.name, { kind: c.smart ? 'smart' : 'col', id: c.id }, c.smart ? n(p => matchesSmart(p, c.rules)) : c.photos.length,
-    h('button', { class: 'x', title: 'Delete collection', 'aria-label': 'Delete collection ' + c.name, onclick: (e) => { e.stopPropagation(); confirmDlg(`Delete the collection “${c.name}”? The photos stay in your library.`, 'Delete', () => { S.collections = S.collections.filter(x => x !== c); U.DB.del('collections', c.id); if (S.source.id === c.id) S.source = { kind: 'all' }; renderAll(); }); } }, '×')));
-  L.append(section('cols', 'Collections', h('div', {},
-    h('div', { class: 'list' }, cols.length ? cols : h('div', { class: 'empty', text: 'Group photos into collections, or make a smart collection that fills itself from rules.' })),
+  const cover = (c) => { const p = c.smart ? lp.find(x => matchesSmart(x, c.rules)) : c.photos.map(id => S.photos.find(x => x.id === id)).find(x => x && !x.deleted); return h('span', { class: 'cov' }, p ? h('img', { src: p.thumb, alt: '' }) : null); };
+  const tools = (c) => h('span', { class: 'acts' },
+    h('button', { class: 'x', title: 'Rename', 'aria-label': 'Rename album ' + c.name, onclick: (e) => { e.stopPropagation(); renameAlbumDlg(c); } }, '✎'),
+    h('button', { class: 'x', title: 'Delete album', 'aria-label': 'Delete album ' + c.name, onclick: (e) => { e.stopPropagation(); confirmDlg(`Delete the album “${c.name}”? The photos stay in your library.`, 'Delete album', () => { S.collections = S.collections.filter(x => x !== c); U.DB.del('collections', c.id); if (S.source.id === c.id) S.source = { kind: 'all' }; renderAll(); }); } }, '×'));
+  const albums = S.collections.filter(c => !c.smart).map(c => item(c.name, { kind: 'col', id: c.id }, c.photos.filter(id => lp.some(p => p.id === id)).length, tools(c), cover(c)));
+  const smarts = S.collections.filter(c => c.smart).map(c => item(c.name, { kind: 'smart', id: c.id }, n(p => matchesSmart(p, c.rules)), tools(c), cover(c)));
+  L.append(section('cols', 'Albums', h('div', {},
+    h('div', { class: 'list albums' }, albums.length ? albums : h('div', { class: 'empty', text: isMobile() ? 'Make an album, then select photos and choose Album to add them.' : 'Make an album, then drag photos onto it, or select photos and choose Album.' })),
+    smarts.length ? [h('div', { class: 'sub', text: 'Smart albums' }), h('div', { class: 'list albums' }, smarts)] : null,
     h('div', { class: 'row', style: { marginTop: '8px' } },
-      h('button', { class: 'btn sm', onclick: newCollectionDlg }, '+ Collection'),
-      h('button', { class: 'btn sm', onclick: () => smartDlg() }, '+ Smart collection')))));
-  const kw = {}; S.photos.forEach(p => p.keywords.forEach(k => kw[k] = (kw[k] || 0) + 1));
+      h('button', { class: 'btn sm', onclick: newCollectionDlg }, '+ Album'),
+      h('button', { class: 'btn sm', onclick: () => smartDlg() }, '+ Smart album')))));
+  const kw = {}; lp.forEach(p => p.keywords.forEach(k => kw[k] = (kw[k] || 0) + 1));
   const kws = Object.keys(kw).sort();
   setTimeout(applyMobile, 0);
   L.append(section('kw', 'Keywords', h('div', { class: 'list' }, kws.length ? kws.map(k => item(k, { kind: 'kw', id: k }, kw[k])) : h('div', { class: 'empty', text: 'Keywords you add to photos appear here.' }))));
 }
+function renameAlbumDlg(c) {
+  const name = h('input', { type: 'text', id: 'albName', value: c.name });
+  dialog('Rename album', [h('label', { class: 'field' }, h('span', { text: 'Name' }), name)], 'Rename', () => { c.name = name.value.trim() || c.name; U.DB.put('collections', c); renderAll(); });
+  setTimeout(() => name.select(), 30);
+}
+function acceptPhotoDrop(el, colId) {
+  el.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('text/x-safelight')) { e.preventDefault(); el.classList.add('dropon'); } });
+  el.addEventListener('dragleave', () => el.classList.remove('dropon'));
+  el.addEventListener('drop', (e) => { const d = e.dataTransfer.getData('text/x-safelight'); el.classList.remove('dropon'); if (!d) return; e.preventDefault(); addToAlbum(colId, d.split(',')); });
+}
+function addToAlbum(colId, ids) {
+  const c = S.collections.find(x => x.id === colId); if (!c) return;
+  let n = 0; ids.forEach(id => { if (!c.photos.includes(id)) { c.photos.push(id); n++; } });
+  U.DB.put('collections', c); renderLibLeft(); if (S.view === 'library') renderLibRight();
+  toast(n ? `Added ${n} photo${n === 1 ? '' : 's'} to “${c.name}”.` : `Already in “${c.name}”.`);
+}
 function newCollectionDlg() {
-  const name = h('input', { type: 'text', id: 'colName', value: 'New collection' });
+  const name = h('input', { type: 'text', id: 'colName', value: 'New album' });
   const addSel = h('input', { type: 'checkbox', id: 'colAdd', checked: S.sel.size > 0 });
-  dialog('New collection', [h('label', { class: 'field' }, h('span', { text: 'Name' }), name), h('label', { class: 'chk' }, addSel, `Include the ${S.sel.size} selected photo${S.sel.size === 1 ? '' : 's'}`)], 'Create', () => {
+  dialog('New album', [h('label', { class: 'field' }, h('span', { text: 'Name' }), name), S.sel.size ? h('label', { class: 'chk' }, addSel, `Add the ${S.sel.size} selected photo${S.sel.size === 1 ? '' : 's'}`) : null], 'Create', () => {
     const c = { id: U.uid(), name: name.value.trim() || 'Untitled', photos: addSel.checked ? [...S.sel] : [] };
     S.collections.push(c); U.DB.put('collections', c); S.source = { kind: 'col', id: c.id }; renderAll();
   });
@@ -312,10 +349,10 @@ function smartDlg() {
   const kw = h('input', { type: 'text', id: 'smKw', placeholder: 'e.g. travel' });
   const ed = h('input', { type: 'checkbox', id: 'smEd' });
   rating.value = '3';
-  dialog('New smart collection', [h('label', { class: 'field' }, h('span', { text: 'Name' }), name),
+  dialog('New smart album', [h('label', { class: 'field' }, h('span', { text: 'Name' }), name),
     h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', { text: 'Rating' }), rating), h('label', { class: 'field' }, h('span', { text: 'Flag' }), flag), h('label', { class: 'field' }, h('span', { text: 'Color label' }), label), h('label', { class: 'field' }, h('span', { text: 'Keyword contains' }), kw)),
     h('label', { class: 'chk' }, ed, 'Only edited photos')], 'Create', () => {
-    const c = { id: U.uid(), name: name.value.trim() || 'Smart collection', smart: true, rules: { minRating: +rating.value, flag: flag.value, label: label.value, keyword: kw.value.trim(), edited: ed.checked } };
+    const c = { id: U.uid(), name: name.value.trim() || 'Smart album', smart: true, rules: { minRating: +rating.value, flag: flag.value, label: label.value, keyword: kw.value.trim(), edited: ed.checked } };
     S.collections.push(c); U.DB.put('collections', c); S.source = { kind: 'smart', id: c.id }; renderAll();
   });
 }
@@ -337,25 +374,33 @@ function renderLibCenter() {
     sel('libSort', [['capture', 'Sort: capture time'], ['import', 'Sort: import order'], ['name', 'Sort: file name'], ['rating', 'Sort: rating']], f.sort, v => f.sort = v),
     h('input', { type: 'range', id: 'libSize', min: 120, max: 320, value: f.cell, style: { width: '90px' }, 'aria-label': 'Thumbnail size', oninput: (e) => { f.cell = +e.target.value; $('#grid').style.setProperty('--cell', f.cell + 'px'); } }),
     h('span', { class: 'count', id: 'libCount' }),
-    h('button', { class: 'btn sm monly' + (S.selectMode ? ' on' : ''), onclick: () => { S.selectMode = !S.selectMode; document.body.classList.toggle('selmode', S.selectMode); if (!S.selectMode && S.cur) S.sel = new Set([S.cur]); renderLibCenter(); renderTabbar(); } }, S.selectMode ? `Done (${S.sel.size})` : 'Select'));
+    h('button', { class: 'btn sm monly' + (S.selectMode ? ' on' : ''), id: 'selBtn', onclick: () => setSelectMode(!S.selectMode) }, S.selectMode ? 'Done' : 'Select'));
   const grid = h('div', { class: 'grid', id: 'grid', style: { '--cell': f.cell + 'px' } });
-  C.append(bar, grid);
+  C.append(bar, grid, h('div', { class: 'selbar', id: 'selbar', hidden: true }));
   setupDrop(C);
   renderGrid();
 }
 function renderGrid() {
   const grid = $('#grid'); if (!grid) return;
   const list = visiblePhotos(); grid.innerHTML = '';
-  $('#libCount').textContent = `${list.length} of ${S.photos.length} · ${S.sel.size} selected`;
+  $('#libCount').textContent = `${list.length} of ${live().length} · ${selIds().length} selected`;
+  renderSelBar();
   if (!list.length) {
     grid.append(h('div', { class: 'empty', style: { gridColumn: '1/-1', textAlign: 'center', padding: '60px 0' } },
-      S.photos.length ? 'No photos match these filters.' : 'Drop photos here, or use Import. JPEG, PNG, WebP and camera RAW files all work.'));
+      S.source.kind === 'trash' ? 'Nothing here. Deleted photos stay here for 30 days before they are removed for good.' : live().length ? 'No photos match these filters.' : 'Drop photos here, or use Import. JPEG, PNG, WebP and camera RAW files all work.'));
     return;
   }
   for (const p of list) {
     const ed = isEdited(p.edits);
-    const cell = h('div', { class: 'cell' + (S.sel.has(p.id) ? ' sel' : '') + (S.cur === p.id ? ' cur' : '') + (p.flag === -1 ? ' rej' : ''), tabindex: 0,
-      onclick: (e) => { if (isMobile()) { if (S.selectMode) { S.sel.has(p.id) ? S.sel.delete(p.id) : S.sel.add(p.id); S.cur = p.id; renderGrid(); renderStrip(); } else { S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); } return; } selectPhoto(p.id, e, list); }, ondblclick: () => { S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); } },
+    const cell = h('div', { class: 'cell' + (S.sel.has(p.id) ? ' sel' : '') + (S.cur === p.id ? ' cur' : '') + (p.flag === -1 ? ' rej' : ''), tabindex: 0, draggable: isMobile() ? 'false' : 'true', 'data-id': p.id,
+      onclick: (e) => {
+        if (performance.now() < suppressCellClick) return;
+        if (isMobile()) { if (S.selectMode) toggleSel(p.id); else if (S.source.kind !== 'trash') { S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); } else { setSelectMode(true); toggleSel(p.id); } return; }
+        selectPhoto(p.id, e, list);
+      },
+      ondblclick: () => { if (isMobile() || S.source.kind === 'trash') return; S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); },
+      oncontextmenu: (e) => { e.preventDefault(); if (!S.sel.has(p.id)) { S.sel = new Set([p.id]); S.cur = p.id; renderGrid(); renderLibRight(); renderStrip(); } photoMenu(e.clientX, e.clientY); },
+      ondragstart: (e) => { if (!S.sel.has(p.id)) { S.sel = new Set([p.id]); S.cur = p.id; } e.dataTransfer.setData('text/x-safelight', selIds().join(',')); e.dataTransfer.effectAllowed = 'copy'; } },
       h('div', { class: 'thumb' }, h('img', { src: p.thumb, alt: p.title || p.name, loading: 'lazy', draggable: 'false' })),
       p.rating ? h('span', { class: 'mstar monly', text: '★'.repeat(p.rating) }) : null,
       h('div', { class: 'nm', text: p.title || p.name }),
@@ -366,8 +411,105 @@ function renderGrid() {
         p.raw ? h('span', { class: 'tag', text: 'RAW' }) : null,
         p.virtual ? h('span', { class: 'tag', text: 'COPY' }) : null,
         ed ? h('span', { class: 'tag ed', text: 'EDITED' }) : null));
+    longPress(cell, () => { suppressCellClick = performance.now() + 700; buzz(10); if (!S.selectMode) setSelectMode(true); if (!S.sel.has(p.id)) toggleSel(p.id); });
     grid.append(cell);
   }
+}
+let suppressCellClick = 0;
+function longPress(el, fn) {
+  let t = null, x = 0, y = 0;
+  el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; x = e.clientX; y = e.clientY; clearTimeout(t); t = setTimeout(fn, 450); });
+  el.addEventListener('pointermove', (e) => { if (t && Math.hypot(e.clientX - x, e.clientY - y) > 8) { clearTimeout(t); t = null; } });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => el.addEventListener(ev, () => { clearTimeout(t); t = null; }));
+  el.addEventListener('contextmenu', (e) => { if (e.pointerType !== 'mouse' && isMobile()) e.preventDefault(); });
+}
+function setSelectMode(on) {
+  S.selectMode = on; S.sel = new Set();
+  if (!on && S.cur && !isMobile()) S.sel.add(S.cur);
+  document.body.classList.toggle('selmode', on);
+  const b = $('#selBtn'); if (b) { b.textContent = on ? 'Done' : 'Select'; b.classList.toggle('on', on); }
+  renderGrid(); renderLibRight(); renderStrip(); renderTabbar();
+}
+function toggleSel(id) {
+  S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); S.cur = id;
+  const c = document.querySelector(`.cell[data-id="${id}"]`); if (c) c.classList.toggle('sel', S.sel.has(id));
+  const n = $('#libCount'); if (n) n.textContent = `${visiblePhotos().length} of ${live().length} · ${selIds().length} selected`;
+  renderSelBar(); renderLibRight(); renderStrip();
+}
+/* ---- selection action bar ---- */
+const AICON = {
+  star: '<path d="M10 2.5l2.3 4.8 5.2.7-3.8 3.6.9 5.2L10 14.3l-4.6 2.5.9-5.2-3.8-3.6 5.2-.7z"/>',
+  flag: '<path d="M5 17V3M5 3h9l-2 3.5 2 3.5H5"/>',
+  label: '<circle cx="10" cy="10" r="6"/>',
+  album: '<path d="M3 6h5l2 2h7v8H3z"/><path d="M10 10v4M8 12h4"/>',
+  out: '<path d="M10 3v10M6 9l4 4 4-4M4 16h12"/>',
+  trash: '<path d="M4 6h12M8 6V4h4v2M6 6l1 11h6l1-11"/>',
+  restore: '<path d="M4 10a6 6 0 1 0 2-4.5"/><path d="M4 3v3h3"/>',
+  copy: '<rect x="6" y="6" width="10" height="10" rx="1.5"/><path d="M4 13V4h9"/>',
+  minus: '<path d="M3 6h5l2 2h7v8H3z"/><path d="M8 12h4"/>',
+  all: '<rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 10l2 2 4-4"/>'
+};
+const ibtn = (icon, label, fn, cls) => h('button', { class: 'sbtn' + (cls ? ' ' + cls : ''), onclick: fn, title: label, 'aria-label': label, html: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${AICON[icon]}</svg><span>${label}</span>` });
+function renderSelBar() {
+  const bar = $('#selbar'); if (!bar) return;
+  const ids = selIds(), trash = S.source.kind === 'trash';
+  const show = isMobile() ? S.selectMode : ids.length > 0;
+  bar.hidden = !show; if (!show) { document.body.classList.remove('hasbar'); return; }
+  document.body.classList.add('hasbar');
+  bar.innerHTML = '';
+  const none = !ids.length;
+  const list = visiblePhotos();
+  const allSel = list.length && list.every(p => S.sel.has(p.id));
+  bar.append(h('div', { class: 'sbhead' }, h('b', { text: ids.length ? `${ids.length} selected` : 'Tap photos to select' }),
+    h('button', { class: 'btn sm ghost', onclick: () => { S.sel = allSel ? new Set() : new Set(list.map(p => p.id)); renderGrid(); renderLibRight(); renderStrip(); } }, allSel ? 'Select none' : 'Select all')));
+  const acts = h('div', { class: 'sbacts' });
+  if (trash) acts.append(ibtn('restore', 'Restore', () => restorePhotos(ids)), ibtn('trash', 'Delete forever', () => purgeDlg(ids), 'danger'));
+  else {
+    acts.append(ibtn('star', 'Rate', () => ratePicker(ids)), ibtn('flag', 'Flag', () => flagPicker(ids)), ibtn('label', 'Label', () => labelPicker(ids)), ibtn('album', 'Album', () => albumPicker(ids)));
+    if (S.source.kind === 'col') acts.append(ibtn('minus', 'Remove from album', () => removeFromAlbum(S.source.id, ids)));
+    acts.append(ibtn('out', 'Export', () => exportDlg()), ibtn('trash', 'Delete', () => trashPhotos(ids), 'danger'));
+  }
+  acts.querySelectorAll('button').forEach(b => b.disabled = none);
+  bar.append(acts);
+}
+function ratePicker(ids) {
+  const d = dialog(`Rate ${ids.length} photo${ids.length === 1 ? '' : 's'}`, [h('div', { class: 'pickrow' }, [0, 1, 2, 3, 4, 5].map(r => h('button', { class: 'btn', onclick: () => { setMeta(ids, p => p.rating = r); d.close(); } }, r ? '★'.repeat(r) : 'None')))], null, null, { cancel: 'Close' });
+}
+function flagPicker(ids) {
+  const d = dialog(`Flag ${ids.length} photo${ids.length === 1 ? '' : 's'}`, [h('div', { class: 'pickrow' }, [[1, 'Pick'], [0, 'Unflag'], [-1, 'Reject']].map(([v, t]) => h('button', { class: 'btn', onclick: () => { setMeta(ids, p => p.flag = v); d.close(); } }, t)))], null, null, { cancel: 'Close' });
+}
+function labelPicker(ids) {
+  const d = dialog(`Color label for ${ids.length} photo${ids.length === 1 ? '' : 's'}`, [h('div', { class: 'pickrow' }, [null, ...Object.keys(LABELS)].map(k => h('button', { class: 'btn', onclick: () => { setMeta(ids, p => p.label = k); d.close(); } }, h('span', { class: 'lbl', style: { background: k ? LABELS[k] : 'transparent', border: k ? 0 : '1px solid var(--faint)' } }), k ? k[0].toUpperCase() + k.slice(1) : 'None')))], null, null, { cancel: 'Close' });
+}
+function albumPicker(ids) {
+  const albums = S.collections.filter(c => !c.smart);
+  const name = h('input', { type: 'text', id: 'pickAlbum', placeholder: 'New album name' });
+  const d = dialog(`Add ${ids.length} photo${ids.length === 1 ? '' : 's'} to an album`, [
+    albums.length ? h('div', { class: 'list' }, albums.map(c => { const has = ids.every(id => c.photos.includes(id)); return h('button', { class: 'li' + (has ? ' on' : ''), onclick: () => { addToAlbum(c.id, ids); d.close(); } }, h('span', { class: 't', text: c.name }), h('span', { class: 'n', text: has ? 'added' : c.photos.length })); })) : h('div', { class: 'empty', text: 'No albums yet. Name one below.' }),
+    h('div', { class: 'row' }, name, h('button', { class: 'btn pri', onclick: () => { const nm = name.value.trim(); if (!nm) { name.focus(); return; } const c = { id: U.uid(), name: nm, photos: [] }; S.collections.push(c); U.DB.put('collections', c); addToAlbum(c.id, ids); d.close(); } }, 'Create & add'))], null, null, { cancel: 'Close' });
+}
+function removeFromAlbum(colId, ids) {
+  const c = S.collections.find(x => x.id === colId); if (!c) return;
+  const before = c.photos.slice(); c.photos = c.photos.filter(id => !ids.includes(id)); U.DB.put('collections', c);
+  S.sel = new Set(); renderAll();
+  toast(`Removed ${ids.length} from “${c.name}”. The photos stay in your library.`, 4000, { label: 'Undo', fn: () => { c.photos = before; U.DB.put('collections', c); renderAll(); } });
+}
+function photoMenu(x, y) {
+  document.querySelectorAll('.ctx').forEach(m => m.remove());
+  const ids = selIds(), trash = S.source.kind === 'trash', p = ph();
+  const it = (label, fn, cls) => h('button', { class: 'ctxi' + (cls ? ' ' + cls : ''), onclick: () => { m.remove(); fn(); } }, label);
+  const m = h('div', { class: 'ctx', role: 'menu' }, trash ? [it('Restore', () => restorePhotos(ids)), it('Delete forever…', () => purgeDlg(ids), 'danger')] : [
+    ids.length === 1 ? it('Edit', () => setView('edit')) : null,
+    it('Rate…', () => ratePicker(ids)), it('Flag…', () => flagPicker(ids)), it('Color label…', () => labelPicker(ids)),
+    it('Add to album…', () => albumPicker(ids)), S.source.kind === 'col' ? it('Remove from album', () => removeFromAlbum(S.source.id, ids)) : null,
+    ids.length === 1 && p ? it('Make virtual copy', () => virtualCopy(p)) : null,
+    it('Copy settings', () => copyDlg('copy')), S.clip ? it(`Paste settings to ${ids.length}`, () => pasteSettings(ids)) : null,
+    it(`Export ${ids.length}…`, () => exportDlg()), h('hr'), it(`Delete ${ids.length > 1 ? ids.length + ' photos' : 'photo'}`, () => trashPhotos(ids), 'danger')]);
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect(); m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+  const off = (e) => { if (!m.contains(e.target)) { m.remove(); removeEventListener('pointerdown', off, true); } };
+  setTimeout(() => addEventListener('pointerdown', off, true), 0);
+  addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { m.remove(); removeEventListener('keydown', esc); } });
 }
 function selectPhoto(id, e, list) {
   list = list || visiblePhotos();
@@ -384,9 +526,9 @@ function selectPhoto(id, e, list) {
 /* ============================== library: right ============================== */
 function renderLibRight() {
   const R = $('#right'); R.innerHTML = ''; setTimeout(applyMobile, 0);
-  const p = ph();
-  const ids = [...S.sel];
-  const qd = (label, fn) => h('button', { class: 'btn sm', onclick: () => quickDevelop(ids, fn) }, label);
+  const p = ph() && !ph().deleted ? ph() : null;
+  const ids = selIds();
+  const qd = (label, fn) => h('button', { class: 'btn sm', onclick: () => quickDevelop(selIds(), fn) }, label);
   R.append(section('quick', 'Quick adjust', h('div', { class: 'body', style: { padding: 0 } },
     h('div', { class: 'empty', style: { paddingTop: 0 }, text: ids.length ? `Applies to ${ids.length} selected photo${ids.length === 1 ? '' : 's'}.` : 'Select photos to adjust them together.' }),
     h('div', { class: 'row' }, qd('Auto tone', 'auto'), qd('Auto white balance', 'awb'), qd('Black & white', e => e.bw = !e.bw)),
@@ -411,12 +553,13 @@ function renderLibRight() {
       kv('Exposure', [ex.exposure ? U.fmtShutter(ex.exposure) : '', ex.fnumber ? 'f/' + (+ex.fnumber).toFixed(1) : '', ex.iso ? 'ISO ' + ex.iso : '', ex.focal ? Math.round(ex.focal) + ' mm' : ''].filter(Boolean).join(' · ')),
       kv('Sample', p.sample ? 'Generated example photo' : '')))));
   const inCols = S.collections.filter(c => !c.smart);
-  R.append(section('pcols', 'In collections', h('div', { class: 'body', style: { padding: 0 } },
-    inCols.length ? inCols.map(c => h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: c.photos.includes(p.id), onchange: (e) => { ids.forEach(id => { const i = c.photos.indexOf(id); if (e.target.checked && i < 0) c.photos.push(id); if (!e.target.checked && i >= 0) c.photos.splice(i, 1); }); U.DB.put('collections', c); renderLibLeft(); } }), c.name)) : h('div', { class: 'empty', text: 'No collections yet.' }))));
+  R.append(section('pcols', 'In albums', h('div', { class: 'body', style: { padding: 0 } },
+    inCols.length ? inCols.map(c => h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: c.photos.includes(p.id), onchange: (e) => { ids.forEach(id => { const i = c.photos.indexOf(id); if (e.target.checked && i < 0) c.photos.push(id); if (!e.target.checked && i >= 0) c.photos.splice(i, 1); }); U.DB.put('collections', c); renderLibLeft(); } }), c.name)) : h('div', { class: 'empty', text: 'No albums yet.' }),
+    h('div', { class: 'row', style: { marginTop: '6px' } }, h('button', { class: 'btn sm', onclick: () => albumPicker(selIds()) }, 'Add to album…')))));
   R.append(section('pact', 'Photo', h('div', { class: 'row' },
     h('button', { class: 'btn sm', onclick: () => virtualCopy(p) }, 'Make virtual copy'),
     h('button', { class: 'btn sm', onclick: () => setView('edit') }, 'Edit'),
-    h('button', { class: 'btn sm danger', onclick: () => removePhotos(ids) }, ids.length > 1 ? `Remove ${ids.length}` : 'Remove'))));
+    h('button', { class: 'btn sm danger', onclick: () => trashPhotos(selIds()) }, ids.length > 1 ? `Delete ${ids.length}` : 'Delete'))));
 }
 async function quickDevelop(ids, fn) {
   if (!ids.length) return;
@@ -440,25 +583,44 @@ function virtualCopy(p) {
   const c = U.clone(p); c.id = U.uid(); c.virtual = true; c.name = p.name.replace(/(\.[^.]+)?$/, ' (copy)$1'); c.importedAt = Date.now();
   S.photos.push(c); U.DB.put('photos', c); S.cur = c.id; S.sel = new Set([c.id]); toast('Virtual copy made. It shares the original file but keeps its own edits.'); renderAll();
 }
-function removePhotos(ids) {
-  confirmDlg(`Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from Safelight? Your original files on disk are not touched.`, 'Remove', async () => {
-    for (const id of ids) {
-      const p = S.photos.find(x => x.id === id); if (!p) continue;
-      S.photos = S.photos.filter(x => x.id !== id); await U.DB.del('photos', id);
-      S.collections.forEach(c => { const i = c.photos.indexOf(id); if (i >= 0) c.photos.splice(i, 1); });
-      if (!S.photos.some(x => x.imageId === p.imageId)) { await U.DB.del('images', p.imageId); imgCache.delete(p.imageId); }
-    }
-    saveColls(); S.sel.clear(); S.cur = S.photos[0] ? S.photos[0].id : null; if (S.cur) S.sel.add(S.cur);
-    if (S.view === 'edit' && !S.cur) S.view = 'library';
-    renderAll();
-  });
+function trashPhotos(ids) {
+  ids = ids.filter(id => S.photos.some(p => p.id === id && !p.deleted)); if (!ids.length) return;
+  const now = Date.now(), wasEdit = S.view === 'edit';
+  const listBefore = visiblePhotos(), idx = listBefore.findIndex(p => p.id === S.cur);
+  ids.forEach(id => { const p = S.photos.find(x => x.id === id); p.deleted = now; savePhoto(p, true); });
+  S.sel = new Set();
+  const rest = visiblePhotos();
+  const next = rest[Math.min(Math.max(idx, 0), rest.length - 1)];
+  S.cur = next ? next.id : null; if (S.cur && (!isMobile() || !S.selectMode)) S.sel.add(S.cur);
+  if (wasEdit && !S.cur) S.view = 'library';
+  if (isMobile() && S.selectMode) { S.selectMode = false; document.body.classList.remove('selmode'); }
+  renderAll();
+  toast(`Moved ${ids.length} photo${ids.length === 1 ? '' : 's'} to Recently deleted.`, 6000, { label: 'Undo', fn: () => restorePhotos(ids, true) });
 }
-
+function restorePhotos(ids, quiet) {
+  ids.forEach(id => { const p = S.photos.find(x => x.id === id); if (p) { delete p.deleted; savePhoto(p, true); } });
+  S.sel = new Set(ids); S.cur = ids[0] || S.cur; renderAll();
+  if (!quiet) toast(`Restored ${ids.length} photo${ids.length === 1 ? '' : 's'}.`);
+}
+function purgeDlg(ids) {
+  confirmDlg(`Delete ${ids.length} photo${ids.length === 1 ? '' : 's'} for good? This removes ${ids.length === 1 ? 'it' : 'them'} and all edits from Safelight and cannot be undone. Original files on your device are not touched.`, 'Delete forever', () => purgePhotos(ids));
+}
+async function purgePhotos(ids) {
+  for (const id of ids) {
+    const p = S.photos.find(x => x.id === id); if (!p) continue;
+    S.photos = S.photos.filter(x => x.id !== id); await U.DB.del('photos', id);
+    S.collections.forEach(c => { const i = c.photos.indexOf(id); if (i >= 0) c.photos.splice(i, 1); });
+    if (!S.photos.some(x => x.imageId === p.imageId)) { await U.DB.del('images', p.imageId); imgCache.delete(p.imageId); }
+  }
+  saveColls(); S.sel.clear(); const lp = live(); S.cur = lp[0] ? lp[0].id : null;
+  renderAll();
+}
+const removePhotos = trashPhotos;
 /* ============================== filmstrip ============================== */
 function renderStrip() {
   const list = visiblePhotos();
   const bar = $('#stripbar'); bar.innerHTML = '';
-  const srcName = { all: 'All photographs', import: 'Previous import', picks: 'Picks', edited: 'Edited' }[S.source.kind] || (S.collections.find(c => c.id === S.source.id) || {}).name || S.source.id;
+  const srcName = { all: 'All photos', import: 'Previous import', picks: 'Picks', edited: 'Edited', trash: 'Recently deleted' }[S.source.kind] || (S.collections.find(c => c.id === S.source.id) || {}).name || S.source.id;
   bar.append(h('span', { text: `${srcName} · ${list.length} photo${list.length === 1 ? '' : 's'} · ${S.sel.size} selected` }), h('span', { class: 'sp' }));
   if (S.view === 'edit') {
     bar.append(h('button', { class: 'btn sm ghost', onclick: () => copyDlg('copy'), title: 'Copy settings (Ctrl+C)' }, 'Copy'),
@@ -1318,11 +1480,13 @@ function updateStagebar() {
   hold.addEventListener('pointerdown', on); hold.addEventListener('pointerup', off); hold.addEventListener('pointerleave', off); hold.addEventListener('pointercancel', off); hold.addEventListener('contextmenu', (e) => e.preventDefault());
   bar.append(h('button', { class: 'btn sm monly', 'aria-label': 'Previous photo', onclick: () => step(-1) }, '‹'), h('button', { class: 'btn sm monly', 'aria-label': 'Next photo', onclick: () => step(1) }, '›'), hold,
     h('button', { class: 'btn sm monly', 'aria-label': 'Undo', onclick: undo }, '↶'), h('button', { class: 'btn sm monly', 'aria-label': 'Redo', onclick: redo }, '↷'));
+  const more = h('button', { class: 'btn sm', title: 'Photo actions', 'aria-label': 'Photo actions', onclick: (e) => { S.sel = new Set([S.cur]); const r = more.getBoundingClientRect(); photoMenu(r.left, r.bottom + 4); } }, '⋯');
   bar.append(h('span', { class: 'name', text: p.title || p.name }), h('span', { class: 'info', text: G ? `${G.outW} × ${G.outH}${p.raw ? (p.rawMode === 'full' ? ' · RAW' : ' · RAW preview') : ''}` : '' }), h('span', { style: { flex: 1 } }),
     stars(p, r => { setMeta([p.id], x => x.rating = r); }),
     seg([['off', 'Edited', 'Show the edit'], ['split', 'Split', 'Before / after split (Y)'], ['before', 'Before', 'Show the original (\\)']], S.compare, (v) => { S.compare = v; updateStagebar(); requestRender(); }),
     seg([['dark', '◼', 'Dark surround'], ['mid', '◧', 'Grey surround'], ['light', '◻', 'Light surround']], S.stageBg, (v) => { S.stageBg = v; $('#center').style.background = STAGE_BG[v]; updateStagebar(); }));
   bar.lastChild.classList.add('donly'); const segs = bar.querySelectorAll('.seg'); if (segs[0]) segs[0].classList.add('donly');
+  bar.append(more);
 }
 let lay = null;
 function layoutStage() {
@@ -1856,7 +2020,7 @@ addEventListener('keydown', (e) => {
     const list = visiblePhotos(); const i = list.findIndex(p => p.id === S.cur); const n = list[U.clamp(i + (k === 'ArrowRight' ? 1 : -1), 0, list.length - 1)];
     if (n) { e.preventDefault(); selectPhoto(n.id, null, list); } return;
   }
-  if (S.view !== 'edit') { if ((k === 'Delete' || k === 'Backspace') && ids.length) removePhotos(ids); if (k === 'Enter' && S.cur) setView('edit'); return; }
+  if (S.view !== 'edit') { if ((k === 'Delete' || k === 'Backspace') && ids.length) { S.source.kind === 'trash' ? purgeDlg(ids) : trashPhotos(ids); } if (k === 'Enter' && S.cur && S.source.kind !== 'trash') setView('edit'); return; }
   if (k === '\\') { S.compare = S.compare === 'before' ? 'off' : 'before'; updateStagebar(); requestRender(); return; }
   if (k === 'y') { S.compare = S.compare === 'split' ? 'off' : 'split'; updateStagebar(); requestRender(); return; }
   if (k === 'r') { setTool(S.tool === 'crop' ? null : 'crop'); return; }
@@ -1869,6 +2033,7 @@ addEventListener('keydown', (e) => {
   if (k === 'Escape') { if (S.maskCreate || S.picking) { S.maskCreate = null; S.picking = null; updateHint(); renderEditRight(); } else if (S.tool) setTool(null); return; }
   if (k === 'Enter' && S.tool === 'crop') { setTool(null); return; }
   if ((k === 'Delete' || k === 'Backspace') && S.tool === 'heal' && S.selSpot >= 0) { deleteSpot(); return; }
+  if ((k === 'Delete' || k === 'Backspace') && !S.tool && S.cur) { trashPhotos([S.cur]); return; }
   if ((k === 'Delete' || k === 'Backspace') && S.tool === 'mask' && S.selMask >= 0) { P().masks.splice(S.selMask, 1); S.selMask = Math.min(S.selMask, P().masks.length - 1); invalidateBrush(); commit('Delete mask'); renderEditRight(); requestRender(); return; }
 });
 
@@ -1884,6 +2049,7 @@ async function start() {
   $('#storeNote').textContent = ok ? 'Library saved in this browser' : 'This browser blocks storage: your library lasts only until you close the page';
   S.photos = (await U.DB.all('photos')).sort((a, b) => a.importedAt - b.importedAt);
   S.photos.forEach(p => { const d = defaults(); for (const k of Object.keys(d)) if (p.edits[k] === undefined) p.edits[k] = d[k]; });
+  const expired = S.photos.filter(p => p.deleted && Date.now() - p.deleted > 30 * 864e5).map(p => p.id); if (expired.length) setTimeout(() => purgePhotos(expired), 1500);
   S.collections = await U.DB.all('collections');
   S.userPresets = await U.DB.all('presets');
   for (const l of await U.DB.all('luts')) { try { engine.registerLut(l.id, l.size, l.data instanceof Float32Array ? l.data : new Float32Array(l.data)); S.luts.push({ id: l.id, name: l.name, size: l.size }); } catch (e) { console.error(e); } }
