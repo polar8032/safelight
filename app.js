@@ -15,7 +15,7 @@ function defaults() {
     sharpen: 0, sharpRadius: 1, sharpDetail: 25, sharpMask: 0, nrLum: 0, nrDetail: 50, nrColor: 0,
     distortion: 0, lensVig: 0, lensVigMid: 50, caRed: 0, caBlue: 0, defPurple: 0, defGreen: 0,
     tVert: 0, tHorz: 0, tRot: 0, tAspect: 0, tScale: 100, tX: 0, tY: 0,
-    vig: 0, vigMid: 50, vigRound: 0, vigFeather: 50, vigHigh: 0, grain: 0, grainSize: 25, grainRough: 50, grainColor: 0, halation: 0, glow: 0, letterbox: 0, lut: null,
+    vig: 0, vigMid: 50, vigRound: 0, vigFeather: 50, vigHigh: 0, grain: 0, grainSize: 25, grainRough: 50, grainColor: 0, halation: 0, glow: 0, letterbox: 0, lut: null, flare: 0, fade: 0, leak: 0, leakHue: 25, leakPos: 60, damage: 0, border: 0, borderBottom: 0, borderColor: 'white',
     calShadow: 0, calRH: 0, calRS: 0, calGH: 0, calGS: 0, calBH: 0, calBS: 0,
     crop: null, orient: 0, flipH: false, flipV: false,
     masks: [], spots: [], look: null
@@ -33,7 +33,7 @@ const GROUPS = {
   detail: ['Detail', ['sharpen', 'sharpRadius', 'sharpDetail', 'sharpMask', 'nrLum', 'nrDetail', 'nrColor']],
   lens: ['Lens corrections', ['distortion', 'lensVig', 'lensVigMid', 'caRed', 'caBlue', 'defPurple', 'defGreen']],
   transform: ['Transform', ['tVert', 'tHorz', 'tRot', 'tAspect', 'tScale', 'tX', 'tY']],
-  effects: ['Effects', ['vig', 'vigMid', 'vigRound', 'vigFeather', 'vigHigh', 'grain', 'grainSize', 'grainRough', 'grainColor', 'halation', 'glow', 'letterbox']],
+  effects: ['Effects', ['vig', 'vigMid', 'vigRound', 'vigFeather', 'vigHigh', 'grain', 'grainSize', 'grainRough', 'grainColor', 'halation', 'glow', 'letterbox', 'flare', 'fade', 'leak', 'leakHue', 'leakPos', 'damage', 'border', 'borderBottom', 'borderColor']],
   lut: ['LUT', ['lut']],
   calibration: ['Calibration', ['calShadow', 'calRH', 'calRS', 'calGH', 'calGS', 'calBH', 'calBS']],
   crop: ['Crop & orientation', ['crop', 'orient', 'flipH', 'flipV']],
@@ -62,7 +62,7 @@ const BUILTIN = [
   ['Film · Color', 'Seventies Print', { temp: 18, tint: 6, saturation: -10, curve: CRV(FADE(0.06, 0.95), [[0, 0], [0.5, 0.54], [1, 1]], null, [[0, 0.04], [0.5, 0.46], [1, 0.9]]), ghH: 40, ghS: 22, grain: 25 }],
   ['Film · Color', 'Pastel Negative', { exposure: 0.3, contrast: -20, highlights: -20, shadows: 20, saturation: -10, vibrance: 10, curve: CRV(FADE(0.08, 0.97)), hslL: [0, 10, 6, 0, 0, 0, 0, 0], ghH: 330, ghS: 8, grain: 12 }],
   ['Film · Color', 'Cool Matte', { temp: -8, saturation: -12, curve: CRV(FADE(0.09, 0.95)), gsH: 200, gsS: 18, ghH: 210, ghS: 6, grain: 14 }],
-  ['Film · Color', 'Instant Print', { contrast: -10, temp: 8, saturation: -5, curve: CRV(FADE(0.07, 0.93), null, null, [[0, 0.08], [1, 0.95]]), gsH: 190, gsS: 15, ghH: 50, ghS: 15, glow: 10, vig: -22, vigFeather: 70, grain: 15 }],
+  ['Film · Color', 'Instant Print', { contrast: -10, temp: 8, saturation: -5, curve: CRV(FADE(0.07, 0.93), null, null, [[0, 0.08], [1, 0.95]]), gsH: 190, gsS: 15, ghH: 50, ghS: 15, glow: 10, vig: -22, vigFeather: 70, grain: 15, border: 30, borderBottom: 70, borderColor: 'cream' }],
   ['Film · Color', 'Super 8', { temp: 15, contrast: 20, saturation: 10, texture: -18, curve: CRV(FADE(0.06, 0.94)), grain: 55, grainSize: 70, grainRough: 80, grainColor: 40, vig: -40, vigRound: 60, vigFeather: 60, halation: 20, glow: 10 }],
   ['Film · Color', 'Cross Process', { curve: CRV(null, [[0, 0], [0.3, 0.24], [0.75, 0.84], [1, 1]], [[0, 0], [0.25, 0.2], [0.75, 0.82], [1, 1]], [[0, 0.12], [0.5, 0.5], [1, 0.86]]), saturation: 10, contrast: 10, grain: 15 }],
   /* ---- cinema ---- */
@@ -74,6 +74,21 @@ const BUILTIN = [
   ['Cinema', 'Golden Epic', { temp: 12, contrast: 18, highlights: -15, ghH: 40, ghS: 20, gsH: 200, gsS: 15, halation: 15, vig: -12, letterbox: 2.2 }],
   ['Cinema', 'Desert Bleach', { temp: 20, saturation: -25, contrast: 20, curve: CRV(FADE(0.05, 0.97)), ghH: 42, ghS: 30, gsH: 30, gsS: 10, grain: 20, letterbox: 2.39 }],
   ['Cinema', 'Emerald Thriller', { tint: -20, contrast: 25, saturation: -20, gsH: 140, gsS: 25, ghH: 90, ghS: 15, curve: CRV(HARD_S), letterbox: 2.39 }],
+  ['Film · Color', 'Light Leak Dream', { temp: 10, leak: 55, leakHue: 22, leakPos: 70, fade: 18, saturation: -6, grain: 22, halation: 10 }],
+  ['Film · Color', 'Contact Sheet', { contrast: 12, curve: CRV(SOFT_S), grain: 24, grainSize: 30, border: 10, borderColor: 'black', damage: 12 }],
+  ['Film · Color', 'Home Video 90s', { temp: 8, saturation: 14, texture: -40, clarity: -10, caRed: 60, caBlue: -45, grain: 30, grainSize: 60, grainColor: 55, fade: 14, vig: -10 }],
+  ['Cinema', 'Anamorphic Night', { temp: -10, contrast: 15, flare: 50, halation: 25, gsH: 215, gsS: 25, ghH: 30, ghS: 10, grain: 15, letterbox: 2.39 }],
+  ['Cinema', 'Summer Blockbuster', { contrast: 25, vibrance: 20, clarity: 10, gsH: 190, gsS: 28, ghH: 35, ghS: 30, flare: 15, letterbox: 2.39 }],
+  ['Cinema', 'Moonlight Blue', { exposure: -0.4, temp: -25, saturation: -20, gsH: 220, gsS: 35, ghH: 200, ghS: 10, fade: 20, letterbox: 2.39 }],
+  ['Cinema', 'Western Dust', { temp: 22, saturation: -30, contrast: 25, ghH: 38, ghS: 30, gsH: 25, gsS: 15, grain: 30, fade: 15, damage: 15, letterbox: 2.76 }],
+  ['Cinema', 'Arthouse Fade', { contrast: -15, fade: 40, saturation: -20, gsH: 160, gsS: 12, ghH: 30, ghS: 10, grain: 18, letterbox: 1.85 }],
+  ['Cinema', 'Dread', { saturation: -55, contrast: 30, tint: -8, blacks: -15, gsH: 150, gsS: 20, vig: -45, grain: 30, letterbox: 2.39 }],
+  ['Cinema', 'Cold Future', { temp: -20, tint: -6, contrast: 20, clarity: 10, hslS: [-10, -30, -20, 0, 10, 10, 0, 0], gsH: 190, gsS: 30, ghH: 185, ghS: 15, flare: 20, letterbox: 2.39 }],
+  ['Cinema', 'Red Planet', { temp: 30, tint: 6, contrast: 20, dehaze: 15, hslH: [0, -10, -20, -40, 0, 0, 0, 0], ghH: 25, ghS: 35, gsH: 15, gsS: 20, letterbox: 2.39 }],
+  ['Cinema', 'Three-Strip', { saturation: 30, contrast: 20, hslS: [20, 10, 0, 10, 0, 20, 0, 0], curve: CRV(SOFT_S), fade: 5, grain: 12, letterbox: 1.85 }],
+  ['Cinema', 'Neon Rain', { temp: -12, contrast: 20, saturation: 20, gsH: 240, gsS: 30, ghH: 300, ghS: 25, halation: 35, flare: 30, glow: 15, letterbox: 2.39 }],
+  ['Cinema', 'Silver Screen', { bw: true, contrast: 30, glow: 15, grain: 25, vig: -25, letterbox: 1.37 }],
+  ['Cinema', 'Old Reel', { bw: true, contrast: 20, gsH: 35, gsS: 15, ghH: 40, ghS: 10, damage: 60, grain: 50, grainRough: 80, fade: 25, vig: -40, glow: 10, letterbox: 1.37 }],
   /* ---- black & white film ---- */
   ['Film · B&W', 'Classic 400', { bw: true, contrast: 25, bwMix: [10, 10, 5, 0, -5, -15, -5, 0], grain: 32, grainSize: 35, grainRough: 55 }],
   ['Film · B&W', 'Fine Grain 100', { bw: true, contrast: 12, clarity: 8, curve: CRV(SOFT_S), grain: 10, grainSize: 15 }],
@@ -118,7 +133,7 @@ const ph = () => S.photos.find(p => p.id === S.cur);
 const P = () => ph() && ph().edits;
 
 function toast(msg, ms = 2600) {
-  const t = h('div', { class: 'toast', role: 'status', text: msg }); document.body.appendChild(t); setTimeout(() => t.remove(), ms);
+  document.querySelectorAll('.toast').forEach(x => x.remove()); const t = h('div', { class: 'toast', role: 'status', text: msg }); document.body.appendChild(t); setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 240); }, ms);
 }
 const saveTimers = new Map();
 function savePhoto(p, now) {
@@ -249,7 +264,7 @@ function section(id, title, body, opts = {}) {
   const el = h('div', { class: 'sec' + (closed ? ' closed' : '') + (opts.mod ? ' mod' : ''), id: 'sec-' + id });
   const head = h('h3', { onclick: (e) => { if (e.target.closest('.act')) return; el.classList.toggle('closed'); try { localStorage.setItem('safelight.sec.' + id, el.classList.contains('closed') ? '0' : '1'); } catch (e2) {} } },
     h('span', { class: 'dot' }), title, opts.action || null, h('span', { class: 'chev', html: '&#9662;' }));
-  el.append(head, h('div', { class: 'body' }, body));
+  el.append(head, h('div', { class: 'bw' }, h('div', { class: 'body' }, body)));
   el.dataset.tab = SEC_TAB[id] || 'none';
   return el;
 }
@@ -468,7 +483,7 @@ function setupDrop(el) {
 
 /* ============================== dialogs ============================== */
 function dialog(title, body, okLabel, onOk, opts = {}) {
-  const close = () => { m.remove(); document.removeEventListener('keydown', esc, true); };
+  const close = () => { m.classList.add('out'); setTimeout(() => m.remove(), 170); document.removeEventListener('keydown', esc, true); };
   const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
   const ok = h('button', { class: 'btn pri', onclick: async () => { const r = await onOk(); if (r !== false) close(); } }, okLabel);
   const m = h('div', { class: 'modal', onclick: (e) => { if (e.target === m) close(); } },
@@ -497,7 +512,7 @@ async function openCurrent() {
   img = engine.loadImage(src); imgFor = p.id;
   if (p.raw && src.half && p.rawMode !== 'full') { p.rawMode = 'full'; savePhoto(p); }
   brushState = null; S.zoom = 0; S.center = [0.5, 0.5]; S.selMask = -1; S.selSpot = -1;
-  renderEditLeft(); renderEditRight(); renderStrip(); updateStagebar(); layoutStage(); requestRender();
+  renderEditLeft(); renderEditRight(); renderStrip(); updateStagebar(); layoutStage(); requestRender(); fadeInStage();
 }
 function finishEditing(id) {
   const p = S.photos.find(x => x.id === (id || S.cur)); if (p) { savePhoto(p, true); refreshThumb(p); }
@@ -579,17 +594,93 @@ const redo = () => { const p = ph(); if (p) gotoHistory(p.hIndex + 1); };
 
 /* ============================== sliders ============================== */
 function fmtVal(v, step) { if (step < 0.1) return (v > 0 ? '+' : '') + v.toFixed(2); if (step < 1) return v.toFixed(1); return (v > 0 && step >= 1 ? '+' : '') + Math.round(v); }
+/* Touch-safe slider: vertical swipes scroll the panel; only a deliberate sideways drag changes the value,
+   and it moves relative to where it was (a tap never makes it jump). Mouse can click-to-set and drag. */
+const ease = (t) => 1 - Math.pow(1 - t, 3);
+function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 function slider(id, label, min, max, step, get, set, opts = {}) {
   const def = opts.def !== undefined ? opts.def : 0;
-  const out = h('output', { for: id });
-  const inp = h('input', { type: 'range', id, min, max, step, 'aria-label': label });
-  const row = h('div', { class: 'sl' }, h('label', { for: id, text: label, title: 'Double-click to reset', ondblclick: () => { set(def); sync(); opts.onCommit && opts.onCommit(label); } }), inp, out);
-  if (opts.track) inp.style.setProperty('--trk', opts.track);
   const show = opts.fmt || ((v) => fmtVal(v, step));
-  function sync() { const v = get(); inp.value = v; out.textContent = show(v); row.classList.toggle('mod', Math.abs(v - def) > 1e-9); }
-  inp.addEventListener('input', () => { set(+inp.value); out.textContent = show(+inp.value); row.classList.toggle('mod', Math.abs(+inp.value - def) > 1e-9); });
-  inp.addEventListener('change', () => opts.onCommit && opts.onCommit(label));
+  const dec = (String(step).split('.')[1] || '').length;
+  const q = (v) => +(Math.round((U.clamp(v, min, max) - min) / step) * step + min).toFixed(dec);
+  const frac = (v) => (U.clamp(v, min, max) - min) / (max - min);
+  const thumb = h('span', { class: 'th' }), fill = h('span', { class: 'fill' }), zero = h('span', { class: 'z' });
+  const track = h('div', { class: 'trk', id, role: 'slider', tabindex: 0, 'aria-label': label, 'aria-valuemin': min, 'aria-valuemax': max }, h('span', { class: 'rail' }), zero, fill, thumb);
+  if (opts.track) track.style.setProperty('--trk', opts.track);
+  const out = h('button', { class: 'out', type: 'button', title: 'Type a value', 'aria-label': label + ' value' });
+  const lab = h('label', { text: label, title: 'Double-click to reset', ondblclick: () => animateTo(def, true) });
+  const row = h('div', { class: 'sl' }, lab, track, out);
+  let cur = get(), st = null, lastTap = 0, anim = 0;
+  function paint(v) {
+    const f = frac(v), z = frac(def);
+    thumb.style.left = f * 100 + '%'; fill.style.left = Math.min(f, z) * 100 + '%'; fill.style.width = Math.abs(f - z) * 100 + '%'; zero.style.left = z * 100 + '%';
+    out.textContent = show(v); row.classList.toggle('mod', Math.abs(v - def) > 1e-9);
+    track.setAttribute('aria-valuenow', v); track.setAttribute('aria-valuetext', show(v));
+  }
+  function setVal(v) { v = q(v); if (v === cur) return; cur = v; set(v); paint(v); }
+  function begin() { row.classList.add('drag'); S.interacting = true; }
+  function end(changed) { row.classList.remove('drag'); S.interacting = false; requestRender(); if (changed && opts.onCommit) opts.onCommit(label); }
+  function animateTo(target, commitAfter) {
+    cancelAnimationFrame(anim); const from = cur, t0 = performance.now(), D = 220;
+    if (Math.abs(from - target) < 1e-9) return;
+    row.classList.add('drag');
+    const stepf = (now) => { const t = Math.min(1, (now - t0) / D); const v = from + (target - from) * ease(t);
+      if (t < 1) { cur = v; set(v); paint(v); anim = requestAnimationFrame(stepf); } else { cur = NaN; setVal(target); row.classList.remove('drag'); if (commitAfter && opts.onCommit) opts.onCommit(label); } };
+    anim = requestAnimationFrame(stepf);
+  }
+  track.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return; cancelAnimationFrame(anim);
+    const r = track.getBoundingClientRect();
+    st = { id: e.pointerId, x: e.clientX, y: e.clientY, v0: cur, start: cur, w: r.width, active: false, t: performance.now() };
+    if (e.pointerType === 'mouse') {
+      st.active = true; track.setPointerCapture(e.pointerId); begin();
+      const tx = r.left + frac(cur) * r.width;
+      if (Math.abs(e.clientX - tx) > 9) { setVal(min + (e.clientX - r.left) / r.width * (max - min)); st.v0 = cur; st.x = e.clientX; }
+    }
+  });
+  track.addEventListener('pointermove', (e) => {
+    if (!st || e.pointerId !== st.id) return;
+    const dx = e.clientX - st.x, dy = e.clientY - st.y;
+    if (!st.active) {
+      if (Math.abs(dx) > 7 && Math.abs(dx) > Math.abs(dy) * 1.4) { st.active = true; st.x = e.clientX; st.v0 = cur; try { track.setPointerCapture(st.id); } catch (er) {} begin(); }
+      else if (Math.abs(dy) > 7) st = null;
+      return;
+    }
+    let v = st.v0 + dx / st.w * (max - min);
+    const snap = (max - min) * 0.012;
+    if (def >= min && def <= max && Math.abs(v - def) < snap) { if (!st.snapped) { buzz(6); st.snapped = true; } v = def; } else st.snapped = false;
+    setVal(v);
+  });
+  const up = (e) => {
+    if (!st || e.pointerId !== st.id) return; const s0 = st; st = null;
+    if (s0.active) { end(cur !== s0.start); return; }
+    if (e.type === 'pointerup' && e.pointerType !== 'mouse' && performance.now() - s0.t < 300) {
+      const now = performance.now(); if (now - lastTap < 320) { lastTap = 0; animateTo(def, true); } else lastTap = now;
+    }
+  };
+  track.addEventListener('pointerup', up); track.addEventListener('pointercancel', up);
+  track.addEventListener('dblclick', () => animateTo(def, true));
+  track.addEventListener('keydown', (e) => {
+    const big = e.shiftKey ? 10 : 1; let v = cur;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') v = cur + step * big; else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') v = cur - step * big;
+    else if (e.key === 'Home') v = min; else if (e.key === 'End') v = max; else if (e.key === 'PageUp') v = cur + (max - min) / 10; else if (e.key === 'PageDown') v = cur - (max - min) / 10; else return;
+    e.preventDefault(); e.stopPropagation(); setVal(v); clearTimeout(track._t); track._t = setTimeout(() => opts.onCommit && opts.onCommit(label), 400);
+  });
+  out.addEventListener('click', () => {
+    const inp = h('input', { type: 'text', inputmode: 'decimal', class: 'num', value: String(cur), 'aria-label': label });
+    out.replaceWith(inp); inp.focus(); inp.select();
+    let done = false;
+    const fin = (ok) => { if (done) return; done = true; const v = parseFloat(inp.value.replace(',', '.')); inp.replaceWith(out); if (ok && !isNaN(v)) { const b0 = cur; setVal(v); requestRender(); if (cur !== b0 && opts.onCommit) opts.onCommit(label); } };
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') fin(true); if (e.key === 'Escape') fin(false); });
+    inp.addEventListener('blur', () => fin(true));
+  });
+  function sync() { cur = get(); paint(cur); }
   sync(); row.sync = sync; return row;
+}
+/* For canvases that are dragged (curve, wheels): stop the page from scrolling only when the touch starts on a handle. */
+function guardTouch(el, onHandle) {
+  el.style.touchAction = 'pan-y';
+  el.addEventListener('touchstart', (e) => { const t = e.touches[0]; if (e.touches.length === 1 && onHandle(t.clientX, t.clientY)) e.preventDefault(); }, { passive: false });
 }
 function pSlider(key, label, min, max, step, opts = {}) {
   return slider('s-' + key, label, min, max, step, () => P()[key], (v) => { P()[key] = v; requestRender(); }, Object.assign({ def: DEF[key], onCommit: commit }, opts));
@@ -606,8 +697,8 @@ function markMods() {
   }
 }
 function resetGroup(gs, label) {
-  const p = P(); gs.forEach(g => GROUPS[g][1].forEach(k => p[k] = U.clone(DEF[k])));
-  invalidateBrush(); commit('Reset ' + label); renderEditRight(); requestRender();
+  const t = U.clone(P()); gs.forEach(g => GROUPS[g][1].forEach(k => t[k] = U.clone(DEF[k])));
+  animateEdits(t, 'Reset ' + label);
 }
 function resetAct(gs, label) { return h('button', { class: 'act btn sm ghost', title: 'Reset ' + label, onclick: (e) => { e.stopPropagation(); resetGroup(gs, label); } }, 'Reset'); }
 
@@ -644,9 +735,9 @@ function basicPanel() {
     h('div', { class: 'seg' }, h('button', { class: !p.bw ? 'on' : '', onclick: () => { P().bw = false; commit('Color'); renderEditRight(); requestRender(); } }, 'Color'), h('button', { class: p.bw ? 'on' : '', onclick: () => { P().bw = true; commit('Black & white'); renderEditRight(); requestRender(); } }, 'B&W')));
   const wbRow = h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'White balance' }),
     h('button', { class: 'btn sm' + (S.tool === 'wb' ? ' on' : ''), onclick: () => setTool(S.tool === 'wb' ? null : 'wb') }, 'Pick neutral'),
-    h('button', { class: 'btn sm', onclick: () => { Object.assign(P(), autoWB(img, P())); commit('Auto white balance'); renderEditRight(); requestRender(); } }, 'Auto'));
+    h('button', { class: 'btn sm', onclick: () => animateEdits(Object.assign(U.clone(P()), autoWB(img, P())), 'Auto white balance') }, 'Auto'));
   const toneRow = h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Tone' }),
-    h('button', { class: 'btn sm', onclick: () => { Object.assign(P(), autoTone(img, P())); commit('Auto tone'); renderEditRight(); requestRender(); } }, 'Auto'));
+    h('button', { class: 'btn sm', onclick: () => animateEdits(Object.assign(U.clone(P()), autoTone(img, P())), 'Auto tone') }, 'Auto'));
   return section('basic', 'Basic', [tr, wbRow,
     pSlider('temp', 'Temperature', -100, 100, 1, { track: 'linear-gradient(90deg,#4f7fd8,#ccc 50%,#e2b23c)' }),
     pSlider('tint', 'Tint', -100, 100, 1, { track: 'linear-gradient(90deg,#4fb548,#ccc 50%,#c64bb4)' }),
@@ -704,22 +795,30 @@ function buildParamPreview(p) {
 function setupCurve(cv) {
   drawCurve(cv);
   if (S.curveMode !== 'point') return;
-  let drag = -1;
-  const pos = (e) => { const r = cv.getBoundingClientRect(); return [U.clamp((e.clientX - r.left) / r.width, 0, 1), U.clamp(1 - (e.clientY - r.top) / r.height, 0, 1)]; };
-  const hit = (x, y) => P().curve[S.curveCh].findIndex(([px, py]) => Math.hypot(px - x, py - y) < 0.045);
+  let drag = -1, st = null;
+  const pos = (cx, cy) => { const r = cv.getBoundingClientRect(); return [U.clamp((cx - r.left) / r.width, 0, 1), U.clamp(1 - (cy - r.top) / r.height, 0, 1)]; };
+  const hit = (x, y, tol) => P().curve[S.curveCh].findIndex(([px, py]) => Math.hypot(px - x, py - y) < tol);
+  const touchTol = () => 26 / cv.getBoundingClientRect().width;
+  guardTouch(cv, (cx, cy) => { const [x, y] = pos(cx, cy); return hit(x, y, touchTol()) >= 0; });
+  const addAt = (x, y) => { const pts = P().curve[S.curveCh]; pts.push([x, y]); pts.sort((a, b) => a[0] - b[0]); return pts.findIndex(q => q[0] === x && q[1] === y); };
   cv.addEventListener('pointerdown', (e) => {
-    const [x, y] = pos(e); const pts = P().curve[S.curveCh]; let i = hit(x, y);
-    if (i < 0) { pts.push([x, y]); pts.sort((a, b) => a[0] - b[0]); i = pts.findIndex(q => q[0] === x && q[1] === y); }
-    drag = i; cv.setPointerCapture(e.pointerId); drawCurve(cv); requestRender();
+    const [x, y] = pos(e.clientX, e.clientY); let i = hit(x, y, e.pointerType === 'mouse' ? 0.045 : touchTol());
+    if (e.pointerType !== 'mouse' && i < 0) { st = { x: e.clientX, y: e.clientY, t: performance.now() }; return; }
+    if (i < 0) i = addAt(x, y);
+    drag = i; cv.setPointerCapture(e.pointerId); S.interacting = true; drawCurve(cv); requestRender();
   });
   cv.addEventListener('pointermove', (e) => {
-    if (drag < 0) return; const [x, y] = pos(e); const pts = P().curve[S.curveCh];
+    if (drag < 0) return; const [x, y] = pos(e.clientX, e.clientY); const pts = P().curve[S.curveCh];
     const lo = drag > 0 ? pts[drag - 1][0] + 0.01 : 0, hi = drag < pts.length - 1 ? pts[drag + 1][0] - 0.01 : 1;
     pts[drag] = [U.clamp(x, lo, hi), y]; drawCurve(cv); requestRender();
   });
-  const up = () => { if (drag >= 0) { drag = -1; commit('Tone curve'); } };
+  const up = (e) => {
+    if (drag >= 0) { drag = -1; S.interacting = false; requestRender(); commit('Tone curve'); return; }
+    if (st && e.type === 'pointerup' && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8 && performance.now() - st.t < 350) { const [x, y] = pos(e.clientX, e.clientY); addAt(x, y); drawCurve(cv); requestRender(); commit('Tone curve'); }
+    st = null;
+  };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-  cv.addEventListener('dblclick', (e) => { const [x, y] = pos(e); const pts = P().curve[S.curveCh]; const i = hit(x, y); if (i > 0 && i < pts.length - 1 || (i >= 0 && pts.length > 2)) { pts.splice(i, 1); drawCurve(cv); requestRender(); commit('Tone curve'); } });
+  cv.addEventListener('dblclick', (e) => { const [x, y] = pos(e.clientX, e.clientY); const pts = P().curve[S.curveCh]; const i = hit(x, y, 0.06); if (i >= 0 && pts.length > 2) { pts.splice(i, 1); drawCurve(cv); requestRender(); commit('Tone curve'); } });
 }
 
 /* ---- color mixer ---- */
@@ -756,11 +855,22 @@ function wheel(key, label, big) {
     g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.stroke();
     g.fillStyle = 'rgba(255,255,255,.5)'; g.font = '22px JetBrains Mono, monospace'; g.textAlign = 'center'; g.fillText(s > 0 ? `${Math.round(hh)}° ${Math.round(s * 100)}` : '', c, W - 2);
   };
-  let dragging = false;
+  let dragging = false, st = null;
+  const handleAt = () => { const rc = cv.getBoundingClientRect(); const s = P()[key + 'S'] / 100, a = -P()[key + 'H'] * Math.PI / 180, r = rc.width / 2 * (138 / 150); return [rc.left + rc.width / 2 + Math.cos(a) * r * s, rc.top + rc.height / 2 + Math.sin(a) * r * s]; };
+  const nearHandle = (cx, cy) => { const [hx, hy] = handleAt(); return Math.hypot(cx - hx, cy - hy) < 30; };
+  guardTouch(cv, nearHandle);
   const set = (e) => { const rc = cv.getBoundingClientRect(); const x = (e.clientX - rc.left) / rc.width * 300 - 150, y = (e.clientY - rc.top) / rc.height * 300 - 150; const r = Math.hypot(x, y) / 138; let a = -Math.atan2(y, x) * 180 / Math.PI; if (a < 0) a += 360; P()[key + 'H'] = Math.round(a); P()[key + 'S'] = Math.round(U.clamp(r, 0, 1) * 100 * (e.shiftKey ? 0.5 : 1)); draw(); requestRender(); };
-  cv.addEventListener('pointerdown', (e) => { dragging = true; cv.setPointerCapture(e.pointerId); set(e); });
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' && !nearHandle(e.clientX, e.clientY)) { st = { x: e.clientX, y: e.clientY, t: performance.now() }; return; }
+    dragging = true; S.interacting = true; cv.setPointerCapture(e.pointerId); if (e.pointerType === 'mouse') set(e);
+  });
   cv.addEventListener('pointermove', (e) => dragging && set(e));
-  cv.addEventListener('pointerup', () => { if (dragging) { dragging = false; commit(label + ' color'); } });
+  const up = (e) => {
+    if (dragging) { dragging = false; S.interacting = false; requestRender(); commit(label + ' color'); return; }
+    if (st && e.type === 'pointerup' && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8 && performance.now() - st.t < 350) { set(e); commit(label + ' color'); }
+    st = null;
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('dblclick', () => { P()[key + 'S'] = 0; draw(); requestRender(); commit(label + ' reset'); });
   setTimeout(draw, 0);
   return w;
@@ -801,6 +911,13 @@ function effectsPanel() {
     h('div', { class: 'sub', text: 'Film light' }),
     pSlider('halation', 'Halation', 0, 100, 1, { fmt: v => v, track: 'linear-gradient(90deg,var(--raise),#e0552c)' }), pSlider('glow', 'Diffusion glow', 0, 100, 1, { fmt: v => v }),
     h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Letterbox' }), lb),
+    h('div', { class: 'sub', text: 'Cinema' }),
+    pSlider('flare', 'Anamorphic flare', 0, 100, 1, { fmt: v => v, track: 'linear-gradient(90deg,var(--raise),#5a9cff)' }), pSlider('fade', 'Fade', 0, 100, 1, { fmt: v => v }),
+    h('div', { class: 'sub', text: 'Light leak' }),
+    pSlider('leak', 'Amount', 0, 100, 1, { fmt: v => v }), pSlider('leakHue', 'Color', 0, 360, 1, { fmt: v => v + '°', track: 'linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta,red)' }), pSlider('leakPos', 'Position', -100, 100, 1),
+    h('div', { class: 'sub', text: 'Film damage' }), pSlider('damage', 'Dust & scratches', 0, 100, 1, { fmt: v => v }),
+    h('div', { class: 'sub', text: 'Border' }), pSlider('border', 'Size', 0, 100, 1, { fmt: v => v }), pSlider('borderBottom', 'Bottom extra', 0, 100, 1, { fmt: v => v }),
+    h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Border color' }), h('div', { class: 'seg' }, [['white', 'White'], ['cream', 'Cream'], ['black', 'Black']].map(([k, t]) => h('button', { class: (e.borderColor || 'white') === k ? 'on' : '', onclick: () => { P().borderColor = k; commit('Border color'); renderEditRight(); requestRender(); } }, t)))),
     lutRow ? h('div', {}, h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'LUT: ' + lutRow.name }), h('button', { class: 'btn sm ghost', onclick: () => { P().lut = null; commit('Remove LUT'); renderEditRight(); requestRender(); } }, 'Remove')),
       slider('s-lutAmt', 'LUT amount', 0, 100, 1, () => P().lut ? P().lut.amount : 100, (v) => { P().lut.amount = v; requestRender(); }, { def: 100, fmt: v => Math.round(v) + '%', onCommit: () => commit('LUT amount') })) : null],
     { action: resetAct(['effects', 'lut'], 'effects') });
@@ -849,6 +966,7 @@ function cropPanel() {
     h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Aspect' }), asp,
       h('button', { class: 'btn sm', title: 'Swap portrait / landscape', onclick: () => { S.cropPortrait = !S.cropPortrait; applyAspect(); commit('Crop orientation'); requestRender(); } }, '⇄')),
     ang,
+    h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: autoStraighten }, 'Auto straighten'), h('button', { class: 'btn sm', onclick: () => { const c = ensureCrop(); c.angle = 0; constrainCrop(c); syncSlider('s-cropAngle'); commit('Level reset'); requestRender(); } }, 'Level 0°')),
     h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: () => orient(-1) }, '⟲ 90°'), h('button', { class: 'btn sm', onclick: () => orient(1) }, '⟳ 90°'),
       h('button', { class: 'btn sm' + (p.flipH ? ' on' : ''), onclick: () => { P().flipH = !P().flipH; commit('Flip horizontal'); renderEditRight(); requestRender(); } }, 'Flip ↔'),
       h('button', { class: 'btn sm' + (p.flipV ? ' on' : ''), onclick: () => { P().flipV = !P().flipV; commit('Flip vertical'); renderEditRight(); requestRender(); } }, 'Flip ↕')),
@@ -866,6 +984,28 @@ function healPanel() {
       h('button', { class: 'btn sm', disabled: !sp, onclick: deleteSpot }, 'Delete spot'), h('button', { class: 'btn sm', disabled: !p.spots.length, onclick: () => { P().spots = []; S.selSpot = -1; commit('Clear spots'); renderEditRight(); requestRender(); } }, 'Clear all')),
     h('div', { class: 'empty', style: { padding: 0 }, text: S.heal.mode === 'redeye' ? 'Click each pupil to remove red-eye.' : 'Click a blemish to fix it. Safelight picks a source area; drag the dashed circle to choose a better one.' })];
   return section('healtool', 'Healing', body, { open: true });
+}
+function autoStraighten() {
+  const q = defaults(); ['orient', 'flipH', 'flipV', 'tVert', 'tHorz', 'tRot', 'tAspect', 'tScale', 'tX', 'tY', 'distortion'].forEach(k => q[k] = U.clone(P()[k]));
+  const id = engine.renderSmall(img, q, 480, null); requestRender();
+  const W = id.width, H = id.height, d = id.data, L = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) L[i] = 0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2];
+  const bins = new Float32Array(161); // -20..20 degrees in 0.25 steps
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x;
+    const gx = L[i - W + 1] + 2 * L[i + 1] + L[i + W + 1] - L[i - W - 1] - 2 * L[i - 1] - L[i + W - 1];
+    const gy = L[i + W - 1] + 2 * L[i + W] + L[i + W + 1] - L[i - W - 1] - 2 * L[i - W] - L[i - W + 1];
+    const m = Math.hypot(gx, gy); if (m < 60) continue;
+    let a = Math.atan2(gy, gx) * 180 / Math.PI + 90; a = ((a + 45) % 90 + 90) % 90 - 45;
+    if (Math.abs(a) > 20) continue; bins[Math.round((a + 20) * 4)] += m;
+  }
+  let best = -1, bi = 80;
+  for (let i = 2; i < 159; i++) { const v = bins[i - 2] + 2 * bins[i - 1] + 3 * bins[i] + 2 * bins[i + 1] + bins[i + 2]; if (v > best) { best = v; bi = i; } }
+  const ang = bi / 4 - 20;
+  if (best <= 0 || Math.abs(ang) < 0.15) { toast('This photo already looks level.'); return; }
+  const c = ensureCrop(); const from = c.angle, t0 = performance.now();
+  const stepf = (now) => { const t = Math.min(1, (now - t0) / 300); c.angle = from + (ang - from) * ease(t); constrainCrop(c); syncSlider('s-cropAngle'); requestRender(); if (t < 1) requestAnimationFrame(stepf); else { commit('Auto straighten'); toast(`Straightened by ${ang.toFixed(1)}°.`); } };
+  requestAnimationFrame(stepf);
 }
 function deleteSpot() { const p = P(); if (S.selSpot < 0) return; p.spots.splice(S.selSpot, 1); S.selSpot = -1; commit('Delete spot'); renderEditRight(); requestRender(); }
 function newMask(type) {
@@ -998,7 +1138,7 @@ function renderHistory() {
 /* ============================== looks (presets, film looks, LUTs) ============================== */
 const allLooks = () => [...BUILTIN, ...S.userPresets.map(p => Object.assign({ group: 'My presets' }, p)), ...S.luts.map(l => ({ id: 'lut:' + l.id, group: 'LUTs', name: l.name, values: { lut: { id: l.id, amount: 100 } }, lutId: l.id }))];
 const findLook = (id) => allLooks().find(l => l.id === id);
-const DISCRETE = new Set(['bw', 'letterbox', 'crop', 'orient', 'flipH', 'flipV', 'masks', 'spots']);
+const DISCRETE = new Set(['bw', 'letterbox', 'crop', 'orient', 'flipH', 'flipV', 'masks', 'spots', 'borderColor', 'look']);
 function mixVal(k, a, b, t) {
   if (k === 'lut') return b ? { id: b.id, amount: (b.amount == null ? 100 : b.amount) * t } : (t >= 0.5 ? b : a);
   if (DISCRETE.has(k)) return U.clone(t > 0.001 ? b : a);
@@ -1018,8 +1158,23 @@ function applyLookTo(e, look, amount = 100) {
 }
 function applyPreset(look) {
   const e = P(); if (!e) return;
-  applyLookTo(e, look); invalidateBrush();
-  commit(look ? 'Look: ' + look.name : 'Remove look'); renderEditLeft(); renderEditRight(); requestRender();
+  const target = applyLookTo(U.clone(e), look);
+  animateEdits(target, look ? 'Look: ' + look.name : 'Remove look', () => renderEditLeft());
+  setTimeout(() => { document.querySelectorAll('.look').forEach(b => b.classList.toggle('on', b.title === (look ? look.name : 'Original'))); }, 0);
+}
+/* Glide every setting from the current edit to a new one, so looks, resets and auto fixes animate instead of jumping. */
+let editAnim = 0;
+function animateEdits(target, label, after, D = 340) {
+  const e = P(); if (!e) return; cancelAnimationFrame(editAnim);
+  const from = U.clone(e), keys = Object.keys(DEF).filter(k => !['masks', 'spots', 'look', 'crop', 'orient', 'flipH', 'flipV'].includes(k));
+  e.look = target.look; const t0 = performance.now();
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const stepf = (now) => {
+    const t = reduce ? 1 : Math.min(1, (now - t0) / D), k = ease(t);
+    if (t < 1) { for (const key of keys) e[key] = mixVal(key, from[key], target[key], k); S.interacting = true; requestRender(); document.querySelectorAll('.sl').forEach(r => r.sync && r.sync()); editAnim = requestAnimationFrame(stepf); }
+    else { for (const key of Object.keys(target)) e[key] = U.clone(target[key]); S.interacting = false; invalidateBrush(); commit(label); renderEditRight(); after && after(); requestRender(); }
+  };
+  editAnim = requestAnimationFrame(stepf);
 }
 function setLookAmount(v) {
   const e = P(); if (!e || !e.look) return; const look = findLook(e.look.id); if (!look) return;
@@ -1157,7 +1312,7 @@ function updateStagebar() {
     stars(p, r => { setMeta([p.id], x => x.rating = r); }),
     seg([['off', 'Edited', 'Show the edit'], ['split', 'Split', 'Before / after split (Y)'], ['before', 'Before', 'Show the original (\\)']], S.compare, (v) => { S.compare = v; updateStagebar(); requestRender(); }),
     seg([['dark', '◼', 'Dark surround'], ['mid', '◧', 'Grey surround'], ['light', '◻', 'Light surround']], S.stageBg, (v) => { S.stageBg = v; $('#center').style.background = STAGE_BG[v]; updateStagebar(); }));
-  bar.lastChild.classList.add('donly');
+  bar.lastChild.classList.add('donly'); const segs = bar.querySelectorAll('.seg'); if (segs[0]) segs[0].classList.add('donly');
 }
 let lay = null;
 function layoutStage() {
@@ -1170,20 +1325,21 @@ function layoutStage() {
     const mg = cropMode ? 140 : 32; const s = Math.min((sw - mg) / G.outW, (sh - mg) / G.outH);
     cw = G.outW * s; chh = G.outH * s; view = [0, 0, 1, 1];
   } else {
-    const z = S.zoom / (window.devicePixelRatio || 1);
+    const z = S.zoom / Math.min(window.devicePixelRatio || 1, isMobile() ? 2 : 3);
     cw = Math.min(sw, G.outW * z); chh = Math.min(sh, G.outH * z);
     const su = cw / (G.outW * z), sv = chh / (G.outH * z);
     S.center[0] = U.clamp(S.center[0], su / 2, 1 - su / 2); S.center[1] = U.clamp(S.center[1], sv / 2, 1 - sv / 2);
     view = [S.center[0] - su / 2, S.center[1] - sv / 2, S.center[0] + su / 2, S.center[1] + sv / 2];
   }
-  const dpr = window.devicePixelRatio || 1;
+  const baseDpr = Math.min(window.devicePixelRatio || 1, isMobile() ? 2 : 3); let dpr = baseDpr;
+  if (S.interacting && cw * chh * dpr * dpr > 900000) dpr *= Math.sqrt(900000 / (cw * chh * dpr * dpr));
   const x = Math.round((sw - cw) / 2), y = Math.round((sh - chh) / 2);
   const bw = Math.max(1, Math.min(engine.MAXTEX, Math.round(cw * dpr))), bh = Math.max(1, Math.min(engine.MAXTEX, Math.round(chh * dpr)));
   for (const c of [engine.gl.canvas, $('#ov')]) { c.style.left = x + 'px'; c.style.top = y + 'px'; c.style.width = cw + 'px'; c.style.height = chh + 'px'; }
   const gc = engine.gl.canvas; if (gc.width !== bw || gc.height !== bh) { gc.width = bw; gc.height = bh; }
-  const ov = $('#ov'); if (ov.width !== bw || ov.height !== bh) { ov.width = bw; ov.height = bh; }
+  const ov = $('#ov'); const od = Math.min(window.devicePixelRatio || 1, 2); const ow = Math.round(cw * od), oh = Math.round(chh * od); if (ov.width !== ow || ov.height !== oh) { ov.width = ow; ov.height = oh; }
   gc.style.imageRendering = S.zoom > 1 ? 'pixelated' : 'auto';
-  lay = { x, y, w: cw, h: chh, view, G, cropMode, dpr };
+  lay = { x, y, w: cw, h: chh, view, G, cropMode, dpr: baseDpr };
 }
 
 /* ============================== render loop ============================== */
@@ -1205,7 +1361,7 @@ function frameRender() {
     }
   } catch (e) { console.error(e); }
   drawOverlay();
-  clearTimeout(histTimer); histTimer = setTimeout(drawHistogram, 140);
+  clearTimeout(histTimer); if (!S.interacting) histTimer = setTimeout(drawHistogram, 160);
 }
 function drawHistogram() {
   const cv = $('#histo'); if (!cv || !img || !ph()) return;
@@ -1361,7 +1517,11 @@ function setupStagePointer(wrap) {
     const inside = px >= 0 && py >= 0 && px <= lay.w && py <= lay.h;
     wrap.setPointerCapture(e.pointerId);
     const start = { x: e.clientX, y: e.clientY, u, v, center: S.center.slice(), moved: false };
-    if (space || (!S.tool && !S.picking && S.compare !== 'split') || e.button === 1) { drag = { kind: 'pan', start }; return; }
+    if (space || (!S.tool && !S.picking && S.compare !== 'split') || e.button === 1) {
+      drag = { kind: 'pan', start, touch: e.pointerType !== 'mouse' };
+      if (drag.touch && !S.tool) drag.hold = setTimeout(() => { if (drag && !drag.start.moved) { drag.holding = true; S.compareHold = true; buzz(8); showBadge('Original'); requestRender(); } }, 380);
+      return;
+    }
     if (S.compare === 'split' && Math.abs(px - S.split * lay.w) < 14 && !S.tool) { drag = { kind: 'split', start }; return; }
     if (!inside && S.tool !== 'crop') { drag = { kind: 'pan', start }; return; }
     if (S.picking === 'maskColor') { pickMaskColor(u, v); updateHint(); return; }
@@ -1388,7 +1548,16 @@ function setupStagePointer(wrap) {
     const [u, v, px, py] = evToOut(e); const st = drag.start;
     if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 3) st.moved = true;
     if (drag.kind === 'pan') {
-      if (!S.zoom) return; const [u0, v0, u1, v1] = lay.view;
+      if (st.moved) clearTimeout(drag.hold);
+      if (drag.holding) return;
+      if (!S.zoom) {
+        if (!drag.touch || S.tool) return;
+        const dx = e.clientX - st.x, dy = e.clientY - st.y;
+        if (!drag.swipe && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.3) drag.swipe = true;
+        if (drag.swipe) { const list = visiblePhotos(), i = list.findIndex(x => x.id === S.cur); const edge = (dx > 0 && i <= 0) || (dx < 0 && i >= list.length - 1); slideStage(edge ? dx * 0.3 : dx, false); }
+        return;
+      }
+      const [u0, v0, u1, v1] = lay.view;
       S.center = [st.center[0] - (e.clientX - st.x) / lay.w * (u1 - u0), st.center[1] - (e.clientY - st.y) / lay.h * (v1 - v0)];
       requestRender(); return;
     }
@@ -1399,14 +1568,23 @@ function setupStagePointer(wrap) {
     pts.delete(e.pointerId);
     if (pinch) { if (pts.size < 2) { pinch = null; drawNavigator(); } drag = null; return; }
     if (!drag) return; const d = drag; drag = null;
+    clearTimeout(d.hold);
+    if (d.holding) { S.compareHold = false; hideBadge(); requestRender(); return; }
+    if (d.swipe) {
+      const dx = e.clientX - d.start.x, list = visiblePhotos(), i = list.findIndex(x => x.id === S.cur), w = $('#stagewrap').clientWidth;
+      const n = Math.abs(dx) > Math.min(110, w * 0.22) ? list[i + (dx < 0 ? 1 : -1)] : null;
+      if (n && e.type === 'pointerup') { slideStage(dx < 0 ? -w : w, true); setTimeout(() => { swipeIn = dx < 0 ? 1 : -1; selectPhoto(n.id, null, list); }, 200); }
+      else slideStage(0, true);
+      return;
+    }
     if (d.kind === 'pan' && !d.start.moved && !S.tool) {
       if (e.pointerType !== 'mouse') {
         const now = performance.now();
         if (!(lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30)) { lastTap = { t: now, x: e.clientX, y: e.clientY }; return; }
         lastTap = null;
       }
-      if (S.zoom) S.zoom = 0; else { S.zoom = 1; S.center = [d.start.u, d.start.v]; }
-      layoutStage(); requestRender(); renderEditLeft(); return;
+      if (S.zoom) animateZoom(0); else animateZoom(1, [d.start.u, d.start.v]);
+      return;
     }
     if (d.kind === 'pan' && S.zoom) drawNavigator();
     d.up && d.up();
@@ -1720,7 +1898,7 @@ function renderTabbar() {
     : [['looks', 'Looks'], ['light', 'Light'], ['color', 'Color'], ['effects', 'Effects'], ['detail', 'Optics'], ['tools', 'Tools'], ['history', 'History']];
   if (!tabs.some(t => t[0] === S.mtab)) S.mtab = S.view === 'library' ? 'photos' : 'light';
   tb.innerHTML = '';
-  tabs.forEach(([id, label]) => tb.append(h('button', { class: S.mtab === id ? 'on' : '', 'aria-pressed': S.mtab === id ? 'true' : 'false', onclick: () => { S.mtab = id; renderTabbar(); }, html: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${TAB_ICONS[id]}</svg><span>${label}</span>` })));
+  tabs.forEach(([id, label]) => tb.append(h('button', { class: S.mtab === id ? 'on' : '', 'aria-pressed': S.mtab === id ? 'true' : 'false', onclick: () => { if (S.mtab !== id) { S.mtab = id; renderTabbar(); [$('#left'), $('#right')].forEach(p => p && (p.scrollTop = 0)); } }, html: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${TAB_ICONS[id]}</svg><span>${label}</span>` })));
   applyMobile();
 }
 function applyMobile() {
@@ -1733,6 +1911,7 @@ function applyMobile() {
     for (const el of panel.children) {
       const t = el.dataset.tab;
       const show = !mob || (t && t === S.mtab);
+      if (mob && show && el.hidden) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
       el.hidden = !show; if (show) any = true;
     }
     panel.hidden = mob && !any;
@@ -1758,4 +1937,57 @@ function setupInstall() {
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !inFrame) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 setupInstall();
+
+/* ============================== motion helpers ============================== */
+let swipeIn = 0, zoomAnim = 0;
+function slideStage(dx, animate) {
+  for (const c of [engine.gl.canvas, $('#ov')]) {
+    if (!c) continue;
+    c.classList.toggle('swiping', !animate);
+    c.style.transition = animate ? 'transform .26s cubic-bezier(.2,.8,.2,1), opacity .22s ease' : 'none';
+    c.style.transform = dx ? `translateX(${dx}px)` : '';
+  }
+}
+function showBadge(text) { const w = $('#stagewrap'); if (!w) return; hideBadge(); w.appendChild(h('div', { class: 'badge-before enter', id: 'cmpBadge', style: { left: '50%', transform: 'translateX(-50%)' }, text })); }
+function hideBadge() { const b = $('#cmpBadge'); b && b.remove(); }
+function fitZoom() { if (!lay) return 1; const G = lay.G, w = $('#stagewrap'); return Math.min((w.clientWidth - 32) / G.outW, (w.clientHeight - 32) / G.outH) * lay.dpr; }
+function animateZoom(target, center) {
+  cancelAnimationFrame(zoomAnim);
+  const z0 = S.zoom || fitZoom(), z1 = target || fitZoom(), c0 = S.zoom ? S.center.slice() : [0.5, 0.5], c1 = target ? (center || S.center) : [0.5, 0.5];
+  const t0 = performance.now(), D = 280;
+  const stepf = (now) => {
+    const t = Math.min(1, (now - t0) / D), k = ease(t);
+    S.zoom = z0 + (z1 - z0) * k; S.center = [c0[0] + (c1[0] - c0[0]) * k, c0[1] + (c1[1] - c0[1]) * k];
+    if (t < 1) { S.interacting = true; requestRender(); zoomAnim = requestAnimationFrame(stepf); }
+    else { S.zoom = target; S.center = c1.slice(); S.interacting = false; requestRender(); renderEditLeft(); }
+  };
+  zoomAnim = requestAnimationFrame(stepf);
+}
+function fadeInStage() {
+  const c = engine && engine.gl.canvas; if (!c) return;
+  if (swipeIn) {
+    const w = ($('#stagewrap') || {}).clientWidth || 300, from = swipeIn * w * 0.35; swipeIn = 0;
+    slideStage(from, false); c.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { slideStage(0, true); c.style.opacity = '1'; }));
+  } else { c.style.transition = 'opacity .22s ease'; c.style.opacity = '0'; requestAnimationFrame(() => requestAnimationFrame(() => { c.style.opacity = '1'; })); }
+}
+/* resizable sheet on phones */
+(function setupGrab() {
+  const g = $('#grab'); if (!g) return;
+  let h0 = null; try { h0 = +localStorage.getItem('safelight.sheet') || null; } catch (e) {}
+  const setH = (px) => { const vh = innerHeight; px = U.clamp(px, vh * 0.16, vh * 0.72); document.documentElement.style.setProperty('--sheet-h', px + 'px'); return px; };
+  if (h0) setH(h0);
+  let st = null;
+  g.addEventListener('pointerdown', (e) => { const panel = [$('#left'), $('#right')].find(p => p && !p.hidden); st = { y: e.clientY, h: panel ? panel.getBoundingClientRect().height : innerHeight * 0.42, t: performance.now() }; g.setPointerCapture(e.pointerId); $('#app').classList.add('resizing'); });
+  g.addEventListener('pointermove', (e) => { if (!st) return; setH(st.h - (e.clientY - st.y)); layoutStage(); requestRender(); });
+  const up = (e) => {
+    if (!st) return; const s0 = st; st = null; $('#app').classList.remove('resizing');
+    let hh = s0.h - (e.clientY - s0.y);
+    if (Math.abs(e.clientY - s0.y) < 6 && performance.now() - s0.t < 300) hh = s0.h > innerHeight * 0.3 ? innerHeight * 0.2 : innerHeight * 0.45;
+    hh = setH(hh); try { localStorage.setItem('safelight.sheet', String(Math.round(hh))); } catch (er) {}
+    layoutStage(); requestRender();
+  };
+  g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+  g.addEventListener('keydown', (e) => { const panel = [$('#left'), $('#right')].find(p => p && !p.hidden); if (!panel) return; const cur = panel.getBoundingClientRect().height; if (e.key === 'ArrowUp') setH(cur + 40); else if (e.key === 'ArrowDown') setH(cur - 40); else return; e.preventDefault(); layoutStage(); requestRender(); });
+})();
 start();

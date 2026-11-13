@@ -7,15 +7,17 @@ A photo library and non-destructive photo editor that runs entirely in the brows
 - **Library:** import or drag and drop, star ratings, pick/reject flags, color labels, keywords, titles and captions, camera metadata, search and filters, collections, smart collections, virtual copies.
 - **Editing:** white balance (auto and pick-a-neutral), auto tone, exposure, contrast, highlights, shadows, whites, blacks, texture, clarity, dehaze, vibrance, saturation.
 - **Advanced editing:** point and region tone curves, per-color hue/saturation/luminance, black-and-white mix, color-grading wheels, sharpening and noise reduction, lens corrections, perspective transform, vignette, grain, calibration.
-- **Tools:** crop and straighten, healing, cloning, red-eye removal, and up to 8 masks per photo (linear, radial, brush, brightness range, color range).
+- **Tools:** crop with auto straighten, healing, cloning, red-eye removal, and up to 8 masks per photo (linear, radial, brush, brightness range, color range).
 - **Workflow:** undo history, snapshots, built-in and custom presets with an amount slider, copy/paste and sync settings, before/after split view, histogram with clipping warnings, keyboard shortcuts.
-- **Looks:** over 40 one-click looks with live previews on your own photo: color film, black-and-white film and cinema styles (halation, diffusion glow, color grain, letterbox), plus everyday, portrait and landscape looks. Each has an intensity slider, and you can import your own 3D LUTs (`.cube`).
+- **Looks:** over 60 one-click looks with live previews on your own photo: color film, black-and-white film and cinema styles (halation, diffusion glow, anamorphic flare, light leaks, fade, film dust and scratches, borders, color grain, letterbox), plus everyday, portrait and landscape looks. Each has an intensity slider, and you can import your own 3D LUTs (`.cube`).
 - **Export:** JPEG, PNG or WebP, resizing, file naming, optional watermark; several photos export as one .zip.
 - **Camera RAW:** decoded with LibRaw (WebAssembly) at full 16-bit precision so highlights can be recovered. If a file cannot be decoded, the camera's embedded JPEG preview is used instead.
 
 ## Phone and installing as an app
 
-On a phone, Safelight switches to a dedicated layout: the photo on top, one tool sheet below and a tab bar at the bottom (Looks, Light, Color, Effects, Optics, Tools, History). Pinch to zoom, double-tap to zoom to 100%, and hold the "Hold: before" button to see the original.
+On a phone, Safelight switches to a dedicated layout: the photo on top, one tool sheet below and a tab bar at the bottom (Looks, Light, Color, Effects, Optics, Tools, History). Pinch to zoom, double-tap to zoom to 100%, swipe sideways to move between photos, and press and hold the photo (or the "Hold: before" button) to see the original. Drag the handle above the panel to make it taller or shorter.
+
+Sliders are built for touch: swiping up or down over them scrolls the panel, only a sideways drag changes a value, the value moves relative to where it was (a tap never makes it jump), it clicks into place at the default, double-tap resets it, and tapping the number lets you type an exact value.
 
 It is an installable web app. When it is served over HTTPS (for example from GitHub Pages):
 - **Android / Chrome / Edge:** use the Install button in the top bar, or the browser menu's Install app.

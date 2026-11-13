@@ -92,7 +92,7 @@ void main(){
 const MAIN_FS = COMMON + `
 uniform sampler2D uGV, uB1, uB2, uB3, uLut, uBrA, uBrB;
 uniform vec2 uVpx; uniform vec2 uOutPx; uniform float uViewScale;
-uniform vec4 uP0, uP1, uP2, uP3, uP4, uP5, uP6, uP7, uP8;
+uniform vec4 uP0, uP1, uP2, uP3, uP4, uP5, uP6, uP7, uP8, uP9, uP10, uP11;
 uniform highp sampler3D uLut3; uniform vec2 uLut3P;
 uniform float uBW; uniform float uShTint; uniform mat3 uCal;
 uniform vec4 uHsl[8];
@@ -238,6 +238,18 @@ void main(){
     if(uP8.x>0.0){ float k = smoothstep(0.62, 1.15, lb); v = 1.0-(1.0-v)*(1.0-clamp(vec3(1.0,0.32,0.12)*k*uP8.x*0.55,0.0,1.0)); }
     if(uP8.y>0.0){ vec3 gl = bs*smoothstep(0.35, 1.0, lb); v = 1.0-(1.0-clamp(v,0.0,1.0))*(1.0-clamp(gl*uP8.y*0.6,0.0,1.0)); }
   }
+  if(uP9.x>0.0){
+    float st = 0.0;
+    for(int i=-14;i<=14;i++){ float fi=float(i); vec3 c = max(texture(uB2, tc(ouv+vec2(fi*0.022,0.0))).rgb,0.0)*g; float l = lumW(toS3(c)); st += max(l-0.82,0.0)*exp(-abs(fi)*0.16); }
+    v = 1.0-(1.0-clamp(v,0.0,1.0))*(1.0-clamp(vec3(0.35,0.62,1.0)*st*uP9.x*0.55,0.0,1.0));
+  }
+  if(uP9.y>0.0){
+    vec2 lc = vec2(0.5+0.62*uP10.y, 0.32); vec2 d = (ouv-lc)*vec2(uOutPx.x/uOutPx.y*0.6, 1.0);
+    float k = exp(-dot(d,d)*3.2) + 0.35*exp(-pow((ouv.x-lc.x)*2.2,2.0));
+    vec3 lcCol = hsv2rgb(vec3(uP10.x,0.85,1.0));
+    v = 1.0-(1.0-clamp(v,0.0,1.0))*(1.0-clamp(lcCol*k*uP9.y*0.8,0.0,1.0));
+  }
+  if(uP9.z>0.0){ v = v*(1.0-0.13*uP9.z) + 0.1*uP9.z; }
   if(uLut3P.x>0.0){
     float N = uLut3P.y; vec3 c = clamp(v,0.0,1.0)*((N-1.0)/N)+0.5/N;
     v = mix(v, texture(uLut3, c).rgb, uLut3P.x);
@@ -271,6 +283,20 @@ void main(){
     float ar = uOutPx.x/uOutPx.y;
     if(ar < uP8.z){ float bar = (1.0-ar/uP8.z)*0.5; if(ouv.y<bar || ouv.y>1.0-bar) v = vec3(0.0); }
     else { float bar = (1.0-uP8.z/ar)*0.5; if(ouv.x<bar || ouv.x>1.0-bar) v = vec3(0.0); }
+  }
+  if(uP9.w>0.0){
+    vec2 px = ouv*uOutPx; float md = min(uOutPx.x,uOutPx.y);
+    vec2 cell = floor(px/(md*0.018)); float hsd = hash(cell+17.0);
+    if(hsd < 0.02*uP9.w){ vec2 cc = (cell+vec2(hash(cell+3.0),hash(cell+5.0)))*(md*0.018); float r = md*0.0016*(0.5+hash(cell+9.0)*1.5);
+      float dd = length(px-cc); if(dd<r) v = mix(v, hash(cell+1.0)>0.4 ? vec3(0.04) : vec3(0.95), 0.85*(1.0-dd/r)); }
+    float col = floor(ouv.x*260.0); float hs = hash(vec2(col,4.2));
+    if(hs > 1.0-0.03*uP9.w){ float xc = (col+hash(vec2(col,8.1)))/260.0; float w = abs(ouv.x-xc)*uOutPx.x;
+      float seg = smoothstep(0.3,0.6,vnoise(vec2(col, ouv.y*6.0)));
+      if(w<1.2) v = mix(v, vec3(0.92), 0.55*seg*uP9.w); }
+  }
+  if(uP10.z>0.0){
+    vec2 px = ouv*uOutPx; float md = min(uOutPx.x,uOutPx.y); float t = uP10.z*0.12*md; float bt = t + uP10.w*0.22*md;
+    if(px.x<t || px.x>uOutPx.x-t || px.y<t || px.y>uOutPx.y-bt) v = uP11.rgb;
   }
   v = clamp(v,0.0,1.0);
   if(uShowClip==1){ float a=max(max(v.r,v.g),v.b), b=min(min(v.r,v.g),v.b); if(b>=0.996) v=vec3(1.0,0.2,0.25); else if(a<=0.004) v=vec3(0.2,0.45,1.0); }
@@ -513,6 +539,10 @@ function create(canvas) {
     gl.uniform4f(loc.uP6, n(p.vigHigh), n(p.grain), n(p.grainSize), n(p.grainRough));
     gl.uniform4f(loc.uP7, n(p.sharpDetail), 0, 0, 0);
     gl.uniform4f(loc.uP8, n(p.halation || 0), n(p.glow || 0), +p.letterbox || 0, n(p.grainColor || 0));
+    gl.uniform4f(loc.uP9, n(p.flare || 0), n(p.leak || 0), n(p.fade || 0), n(p.damage || 0));
+    gl.uniform4f(loc.uP10, ((p.leakHue == null ? 25 : p.leakHue) % 360) / 360, n(p.leakPos || 0), n(p.border || 0), n(p.borderBottom || 0));
+    const BC = { white: [0.97, 0.97, 0.96], cream: [0.93, 0.9, 0.82], black: [0.02, 0.02, 0.02] }[p.borderColor] || [0.97, 0.97, 0.96];
+    gl.uniform4f(loc.uP11, BC[0], BC[1], BC[2], 0);
     const L3 = p.lut && luts.get(p.lut.id);
     bindTex(7, null); gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_3D, L3 ? L3.tex : dummy3); gl.uniform1i(loc.uLut3, 7);
     gl.uniform2f(loc.uLut3P, L3 ? (p.lut.amount == null ? 1 : p.lut.amount / 100) : 0, L3 ? L3.size : 2);
