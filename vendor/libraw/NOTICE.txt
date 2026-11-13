@@ -1,0 +1,3 @@
+This folder contains libraw-wasm 1.6.0 (ISC license, https://github.com/ybouane/LibRaw-Wasm),
+a WebAssembly build of LibRaw (https://www.libraw.org), which is distributed under the
+GNU LGPL 2.1 or the CDDL 1.0. Files are redistributed unmodified apart from removed source-map comments.
