@@ -8,7 +8,7 @@ in vec2 aPos; out vec2 vUv;
 void main(){ vUv = vec2(aPos.x*0.5+0.5, 0.5-aPos.y*0.5); gl_Position = vec4(aPos,0.0,1.0); }`;
 
 const COMMON = `#version 300 es
-precision highp float; precision highp int;
+precision highp float; precision highp int; precision highp sampler3D;
 in vec2 vUv; out vec4 o;
 uniform vec4 uView;
 uniform vec4 uCrop; uniform float uAngle; uniform vec2 uFlip;
@@ -92,7 +92,8 @@ void main(){
 const MAIN_FS = COMMON + `
 uniform sampler2D uGV, uB1, uB2, uB3, uLut, uBrA, uBrB;
 uniform vec2 uVpx; uniform vec2 uOutPx; uniform float uViewScale;
-uniform vec4 uP0, uP1, uP2, uP3, uP4, uP5, uP6, uP7;
+uniform vec4 uP0, uP1, uP2, uP3, uP4, uP5, uP6, uP7, uP8;
+uniform highp sampler3D uLut3; uniform vec2 uLut3P;
 uniform float uBW; uniform float uShTint; uniform mat3 uCal;
 uniform vec4 uHsl[8];
 uniform vec4 uGrS, uGrM, uGrH, uGrG; uniform vec2 uGrBB;
@@ -232,6 +233,15 @@ void main(){
   v += tintOf(uGrS)*wS + tintOf(uGrM)*wM + tintOf(uGrH)*wH + tintOf(uGrG);
   v += (uGrS.z*wS + uGrM.z*wM + uGrH.z*wH + uGrG.z)*0.25;
 
+  if(uP8.x>0.0 || uP8.y>0.0){
+    vec3 bs = toS3(b2); float lb = lumW(bs);
+    if(uP8.x>0.0){ float k = smoothstep(0.62, 1.15, lb); v = 1.0-(1.0-v)*(1.0-clamp(vec3(1.0,0.32,0.12)*k*uP8.x*0.55,0.0,1.0)); }
+    if(uP8.y>0.0){ vec3 gl = bs*smoothstep(0.35, 1.0, lb); v = 1.0-(1.0-clamp(v,0.0,1.0))*(1.0-clamp(gl*uP8.y*0.6,0.0,1.0)); }
+  }
+  if(uLut3P.x>0.0){
+    float N = uLut3P.y; vec3 c = clamp(v,0.0,1.0)*((N-1.0)/N)+0.5/N;
+    v = mix(v, texture(uLut3, c).rgb, uLut3P.x);
+  }
   if(uP4.z>0.0 || uP4.w>0.0){
     float e = clamp(abs(L-Ls)*10.0,0.0,1.0); vec3 hh = rgb2hsv(clamp(v,0.0,1.0)); float hp = hh.x*360.0;
     float wp = exp(-pow((hp-285.0)/35.0,2.0))*uP4.z, wg = exp(-pow((hp-105.0)/35.0,2.0))*uP4.w;
@@ -253,7 +263,14 @@ void main(){
     float n1 = vnoise(px), n2 = hash(floor(ouv*uOutPx));
     float gn = (mix(n1, n2, uP6.w*0.7)-0.5)*2.0;
     float Lq = lumW(clamp(v,0.0,1.0));
-    v += gn*uP6.y*0.13*(0.35+0.65*(1.0-abs(2.0*Lq-1.0)));
+    vec3 gc = vec3(gn);
+    if(uP8.w>0.0){ vec2 q = floor(ouv*uOutPx/mix(0.8,4.0,uP6.z)); gc += uP8.w*(vec3(hash(q+3.1), hash(q+7.7), hash(q+11.3))-0.5)*1.6; }
+    v += gc*uP6.y*0.13*(0.35+0.65*(1.0-abs(2.0*Lq-1.0)));
+  }
+  if(uP8.z>0.0){
+    float ar = uOutPx.x/uOutPx.y;
+    if(ar < uP8.z){ float bar = (1.0-ar/uP8.z)*0.5; if(ouv.y<bar || ouv.y>1.0-bar) v = vec3(0.0); }
+    else { float bar = (1.0-uP8.z/ar)*0.5; if(ouv.x<bar || ouv.x>1.0-bar) v = vec3(0.0); }
   }
   v = clamp(v,0.0,1.0);
   if(uShowClip==1){ float a=max(max(v.r,v.g),v.b), b=min(min(v.r,v.g),v.b); if(b>=0.996) v=vec3(1.0,0.2,0.25); else if(a<=0.004) v=vec3(0.2,0.45,1.0); }
@@ -380,6 +397,19 @@ function create(canvas) {
     r = rts[key] = { t, f, w, h }; return r;
   }
   const lutTex = gl.createTexture(); let lutKey = '';
+  const luts = new Map();
+  function tex3(size, data) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D, t);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    for (const w of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_3D, w, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, size, size, size, 0, gl.RGB, gl.FLOAT, data);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    return t;
+  }
+  const dummy3 = tex3(2, new Float32Array(24));
+  function registerLut(id, size, data) { const old = luts.get(id); if (old) gl.deleteTexture(old.tex); luts.set(id, { tex: tex3(size, data), size }); }
+  function removeLut(id) { const old = luts.get(id); if (old) { gl.deleteTexture(old.tex); luts.delete(id); } }
   const brushTex = [gl.createTexture(), gl.createTexture()]; let brushVer = -1;
   for (const t of [lutTex, ...brushTex]) {
     gl.bindTexture(gl.TEXTURE_2D, t);
@@ -482,6 +512,10 @@ function create(canvas) {
     gl.uniform4f(loc.uP5, n(p.vig), n(p.vigMid), n(p.vigRound), n(p.vigFeather));
     gl.uniform4f(loc.uP6, n(p.vigHigh), n(p.grain), n(p.grainSize), n(p.grainRough));
     gl.uniform4f(loc.uP7, n(p.sharpDetail), 0, 0, 0);
+    gl.uniform4f(loc.uP8, n(p.halation || 0), n(p.glow || 0), +p.letterbox || 0, n(p.grainColor || 0));
+    const L3 = p.lut && luts.get(p.lut.id);
+    bindTex(7, null); gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_3D, L3 ? L3.tex : dummy3); gl.uniform1i(loc.uLut3, 7);
+    gl.uniform2f(loc.uLut3P, L3 ? (p.lut.amount == null ? 1 : p.lut.amount / 100) : 0, L3 ? L3.size : 2);
     gl.uniform1f(loc.uBW, p.bw ? 1 : 0); gl.uniform1f(loc.uShTint, n(p.calShadow));
     gl.uniformMatrix3fv(loc.uCal, false, calMatrix(p));
     const hsl = new Float32Array(32); for (let i = 0; i < 8; i++) hsl.set([n(p.hslH[i]), n(p.hslS[i]), n(p.hslL[i]), n(p.bwMix[i])], i * 4);
@@ -541,7 +575,7 @@ function create(canvas) {
     const G = geom(img, p, false); const s = long / Math.max(G.outW, G.outH);
     return renderPixels(img, p, Math.max(1, Math.round(G.outW * s)), Math.max(1, Math.round(G.outH * s)), brush);
   }
-  return { gl, render, renderPixels, renderSmall, loadImage, freeImage, MAXTEX, floatRT };
+  return { gl, render, renderPixels, renderSmall, loadImage, freeImage, registerLut, removeLut, MAXTEX, floatRT };
 }
 
 return { create, geom, frame, outToSrc, srcToOut };

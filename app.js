@@ -15,10 +15,10 @@ function defaults() {
     sharpen: 0, sharpRadius: 1, sharpDetail: 25, sharpMask: 0, nrLum: 0, nrDetail: 50, nrColor: 0,
     distortion: 0, lensVig: 0, lensVigMid: 50, caRed: 0, caBlue: 0, defPurple: 0, defGreen: 0,
     tVert: 0, tHorz: 0, tRot: 0, tAspect: 0, tScale: 100, tX: 0, tY: 0,
-    vig: 0, vigMid: 50, vigRound: 0, vigFeather: 50, vigHigh: 0, grain: 0, grainSize: 25, grainRough: 50,
+    vig: 0, vigMid: 50, vigRound: 0, vigFeather: 50, vigHigh: 0, grain: 0, grainSize: 25, grainRough: 50, grainColor: 0, halation: 0, glow: 0, letterbox: 0, lut: null,
     calShadow: 0, calRH: 0, calRS: 0, calGH: 0, calGS: 0, calBH: 0, calBS: 0,
     crop: null, orient: 0, flipH: false, flipV: false,
-    masks: [], spots: []
+    masks: [], spots: [], look: null
   };
 }
 const DEF = defaults();
@@ -33,7 +33,8 @@ const GROUPS = {
   detail: ['Detail', ['sharpen', 'sharpRadius', 'sharpDetail', 'sharpMask', 'nrLum', 'nrDetail', 'nrColor']],
   lens: ['Lens corrections', ['distortion', 'lensVig', 'lensVigMid', 'caRed', 'caBlue', 'defPurple', 'defGreen']],
   transform: ['Transform', ['tVert', 'tHorz', 'tRot', 'tAspect', 'tScale', 'tX', 'tY']],
-  effects: ['Effects', ['vig', 'vigMid', 'vigRound', 'vigFeather', 'vigHigh', 'grain', 'grainSize', 'grainRough']],
+  effects: ['Effects', ['vig', 'vigMid', 'vigRound', 'vigFeather', 'vigHigh', 'grain', 'grainSize', 'grainRough', 'grainColor', 'halation', 'glow', 'letterbox']],
+  lut: ['LUT', ['lut']],
   calibration: ['Calibration', ['calShadow', 'calRH', 'calRS', 'calGH', 'calGS', 'calBH', 'calBS']],
   crop: ['Crop & orientation', ['crop', 'orient', 'flipH', 'flipV']],
   masks: ['Masks', ['masks']],
@@ -48,19 +49,50 @@ const isDefault = (k, v) => JSON.stringify(v) === JSON.stringify(DEF[k]);
 const isEdited = (p) => Object.keys(DEF).some(k => !isDefault(k, p[k]));
 
 /* ============================== presets ============================== */
+const CRV = (rgb, r, g, b) => ({ rgb: rgb || [[0, 0], [1, 1]], r: r || [[0, 0], [1, 1]], g: g || [[0, 0], [1, 1]], b: b || [[0, 0], [1, 1]] });
+const FADE = (lo, hi) => [[0, lo], [0.25, 0.25 + lo * 0.4], [0.75, 0.75 - (1 - hi) * 0.3], [1, hi]];
+const SOFT_S = [[0, 0], [0.25, 0.22], [0.75, 0.79], [1, 1]];
+const HARD_S = [[0, 0], [0.22, 0.15], [0.5, 0.5], [0.78, 0.86], [1, 1]];
 const BUILTIN = [
-  ['Black & White', 'Silver Gelatin', { bw: true, contrast: 22, clarity: 14, whites: 10, blacks: -12, grain: 18, grainSize: 30, bwMix: [10, 14, 8, -10, -14, -20, -5, 5] }],
-  ['Black & White', 'Selenium Print', { bw: true, contrast: 12, shadows: 10, gsH: 265, gsS: 18, ghH: 38, ghS: 12, gradeBalance: -10, vig: -12 }],
-  ['Black & White', 'Soft Matte Mono', { bw: true, contrast: -10, curve: { rgb: [[0, 0.09], [0.3, 0.3], [0.75, 0.76], [1, 0.95]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] }, grain: 10 }],
-  ['Black & White', 'High Contrast Ink', { bw: true, contrast: 55, whites: 25, blacks: -35, clarity: 25, bwMix: [-20, -10, 10, -25, -30, -40, -20, 0] }],
+  /* ---- colour film emulations (original looks, descriptive names) ---- */
+  ['Film · Color', 'Portrait 400', { contrast: -6, highlights: -12, curve: CRV(FADE(0.035, 0.98)), hslS: [-4, -8, -6, -10, 0, -6, 0, 0], hslL: [0, 6, 0, 0, 0, 0, 0, 0], ghH: 45, ghS: 10, gsH: 195, gsS: 6, grain: 18, grainSize: 30, halation: 8 }],
+  ['Film · Color', 'Everyday 200', { temp: 6, vibrance: 12, saturation: 6, curve: CRV(SOFT_S), ghH: 50, ghS: 12, gsH: 210, gsS: 8, hslH: [0, 0, -8, 12, 0, 0, 0, 0], grain: 22, grainSize: 32 }],
+  ['Film · Color', 'Slide 50', { contrast: 28, blacks: -14, saturation: 16, vibrance: 10, curve: CRV(HARD_S), hslS: [6, 4, 0, 12, 10, 18, 6, 0], hslL: [0, 0, 0, -6, 0, -10, 0, 0], grain: 6, vig: -12 }],
+  ['Film · Color', 'Expired Stock', { temp: 12, tint: 10, saturation: -15, curve: CRV(FADE(0.12, 0.9)), gsH: 170, gsS: 20, ghH: 50, ghS: 20, grain: 36, grainRough: 70, grainColor: 35, halation: 15, vig: -15 }],
+  ['Film · Color', 'Seventies Print', { temp: 18, tint: 6, saturation: -10, curve: CRV(FADE(0.06, 0.95), [[0, 0], [0.5, 0.54], [1, 1]], null, [[0, 0.04], [0.5, 0.46], [1, 0.9]]), ghH: 40, ghS: 22, grain: 25 }],
+  ['Film · Color', 'Pastel Negative', { exposure: 0.3, contrast: -20, highlights: -20, shadows: 20, saturation: -10, vibrance: 10, curve: CRV(FADE(0.08, 0.97)), hslL: [0, 10, 6, 0, 0, 0, 0, 0], ghH: 330, ghS: 8, grain: 12 }],
+  ['Film · Color', 'Cool Matte', { temp: -8, saturation: -12, curve: CRV(FADE(0.09, 0.95)), gsH: 200, gsS: 18, ghH: 210, ghS: 6, grain: 14 }],
+  ['Film · Color', 'Instant Print', { contrast: -10, temp: 8, saturation: -5, curve: CRV(FADE(0.07, 0.93), null, null, [[0, 0.08], [1, 0.95]]), gsH: 190, gsS: 15, ghH: 50, ghS: 15, glow: 10, vig: -22, vigFeather: 70, grain: 15 }],
+  ['Film · Color', 'Super 8', { temp: 15, contrast: 20, saturation: 10, texture: -18, curve: CRV(FADE(0.06, 0.94)), grain: 55, grainSize: 70, grainRough: 80, grainColor: 40, vig: -40, vigRound: 60, vigFeather: 60, halation: 20, glow: 10 }],
+  ['Film · Color', 'Cross Process', { curve: CRV(null, [[0, 0], [0.3, 0.24], [0.75, 0.84], [1, 1]], [[0, 0], [0.25, 0.2], [0.75, 0.82], [1, 1]], [[0, 0.12], [0.5, 0.5], [1, 0.86]]), saturation: 10, contrast: 10, grain: 15 }],
+  /* ---- cinema ---- */
+  ['Cinema', 'Teal & Orange', { contrast: 15, gsH: 195, gsS: 30, ghH: 35, ghS: 26, gradeBalance: 10, hslS: [0, 10, -20, -30, 10, 0, -30, -20], hslH: [0, -10, -20, 30, 0, -10, 0, 0], vig: -10, letterbox: 2.39 }],
+  ['Cinema', 'Tungsten Night', { temp: -14, contrast: 10, halation: 45, glow: 12, gsH: 190, gsS: 20, ghH: 30, ghS: 10, grain: 25, grainColor: 20, letterbox: 2.39 }],
+  ['Cinema', 'Bleach Bypass', { saturation: -45, contrast: 40, clarity: 15, curve: CRV(HARD_S), gsH: 210, gsS: 6, grain: 15, letterbox: 1.85 }],
+  ['Cinema', 'Day for Night', { exposure: -1.3, temp: -45, tint: 5, saturation: -30, contrast: 15, highlights: -40, gsH: 220, gsS: 30, vig: -30, letterbox: 2.39 }],
+  ['Cinema', 'Neon Noir', { contrast: 25, saturation: 15, gsH: 230, gsS: 30, ghH: 320, ghS: 20, halation: 30, glow: 15, vig: -25, hslH: [0, 0, 0, 20, 10, 10, 0, 0], letterbox: 2.39 }],
+  ['Cinema', 'Golden Epic', { temp: 12, contrast: 18, highlights: -15, ghH: 40, ghS: 20, gsH: 200, gsS: 15, halation: 15, vig: -12, letterbox: 2.2 }],
+  ['Cinema', 'Desert Bleach', { temp: 20, saturation: -25, contrast: 20, curve: CRV(FADE(0.05, 0.97)), ghH: 42, ghS: 30, gsH: 30, gsS: 10, grain: 20, letterbox: 2.39 }],
+  ['Cinema', 'Emerald Thriller', { tint: -20, contrast: 25, saturation: -20, gsH: 140, gsS: 25, ghH: 90, ghS: 15, curve: CRV(HARD_S), letterbox: 2.39 }],
+  /* ---- black & white film ---- */
+  ['Film · B&W', 'Classic 400', { bw: true, contrast: 25, bwMix: [10, 10, 5, 0, -5, -15, -5, 0], grain: 32, grainSize: 35, grainRough: 55 }],
+  ['Film · B&W', 'Fine Grain 100', { bw: true, contrast: 12, clarity: 8, curve: CRV(SOFT_S), grain: 10, grainSize: 15 }],
+  ['Film · B&W', 'Pushed 3200', { bw: true, contrast: 50, blacks: -25, whites: 15, clarity: 20, grain: 60, grainSize: 55, grainRough: 75, vig: -15 }],
+  ['Film · B&W', 'Red Filter', { bw: true, contrast: 25, bwMix: [40, 30, 15, -10, -40, -60, -20, 10] }],
+  ['Film · B&W', 'Infrared Glow', { bw: true, contrast: 20, bwMix: [10, 30, 50, 80, 20, -80, -30, 0], glow: 35, grain: 20 }],
+  ['Film · B&W', 'Film Noir', { bw: true, contrast: 55, blacks: -30, vig: -45, vigFeather: 60, glow: 10, grain: 25 }],
+  ['Film · B&W', 'Sepia Print', { bw: true, curve: CRV(FADE(0.05, 0.96)), gsH: 30, gsS: 25, gmH: 35, gmS: 20, ghH: 45, ghS: 12, grain: 15 }],
+  ['Film · B&W', 'Cyanotype', { bw: true, contrast: 10, ggH: 205, ggS: 35, gsH: 215, gsS: 30 }],
+  ['Film · B&W', 'Lith Print', { bw: true, contrast: 45, blacks: -20, gsH: 25, gsS: 30, ghH: 30, ghS: 8, grain: 40, grainRough: 90 }],
+  ['Film · B&W', 'Silver Gelatin', { bw: true, contrast: 22, clarity: 14, whites: 10, blacks: -12, grain: 18, grainSize: 30, bwMix: [10, 14, 8, -10, -14, -20, -5, 5] }],
+  ['Film · B&W', 'Selenium Print', { bw: true, contrast: 12, shadows: 10, gsH: 265, gsS: 18, ghH: 38, ghS: 12, gradeBalance: -10, vig: -12 }],
+  ['Film · B&W', 'Soft Matte Mono', { bw: true, contrast: -10, curve: CRV([[0, 0.09], [0.3, 0.3], [0.75, 0.76], [1, 0.95]]), grain: 10 }],
+  /* ---- everyday ---- */
   ['Color', 'Punch', { contrast: 28, vibrance: 28, clarity: 12, texture: 10, blacks: -8, whites: 8 }],
   ['Color', 'Golden Hour', { temp: 16, tint: 4, vibrance: 18, highlights: -12, ghH: 42, ghS: 18, gsH: 220, gsS: 8 }],
   ['Color', 'Blue Hour', { temp: -18, tint: 6, contrast: 10, gsH: 230, gsS: 22, ghH: 200, ghS: 6, vibrance: 10 }],
   ['Color', 'Clean Neutral', { contrast: 8, highlights: -18, shadows: 18, vibrance: 8, sharpen: 30 }],
-  ['Creative', 'Faded Film', { contrast: -12, saturation: -14, curve: { rgb: [[0, 0.07], [0.25, 0.23], [0.75, 0.78], [1, 0.96]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] }, gsH: 190, gsS: 16, ghH: 40, ghS: 10, grain: 22 }],
-  ['Creative', 'Cross Process', { curve: { rgb: [[0, 0], [1, 1]], r: [[0, 0], [0.3, 0.24], [0.75, 0.84], [1, 1]], g: [[0, 0], [0.25, 0.2], [0.75, 0.82], [1, 1]], b: [[0, 0.12], [0.5, 0.5], [1, 0.86]] }, saturation: 10, contrast: 10 }],
-  ['Creative', 'Teal & Amber', { gsH: 195, gsS: 30, ghH: 35, ghS: 26, gradeBalance: 10, hslS: [0, 10, -20, -30, 10, 0, -30, -20], hslH: [0, -10, -20, 30, 0, -10, 0, 0], contrast: 15 }],
-  ['Creative', 'Nocturne', { exposure: -0.3, dehaze: 15, clarity: 15, temp: -10, vibrance: 15, vig: -25, blacks: -10 }],
+  ['Color', 'Nocturne', { exposure: -0.3, dehaze: 15, clarity: 15, temp: -10, vibrance: 15, vig: -25, blacks: -10 }],
   ['Portrait', 'Soft Skin', { texture: -22, clarity: -10, highlights: -12, shadows: 8, sharpen: 20, hslL: [4, 8, 0, 0, 0, 0, 0, 0], hslS: [-4, -6, 0, 0, 0, 0, 0, 0] }],
   ['Portrait', 'High Key', { exposure: 0.6, contrast: -18, highlights: -30, shadows: 30, whites: 15, vibrance: -5 }],
   ['Portrait', 'Low Key', { exposure: -0.5, contrast: 20, shadows: -15, blacks: -20, vig: -30, vigFeather: 70 }],
@@ -70,7 +102,7 @@ const BUILTIN = [
 
 /* ============================== state ============================== */
 const S = {
-  view: 'library', photos: [], collections: [], userPresets: [],
+  view: 'library', photos: [], collections: [], userPresets: [], luts: [], lookGroup: null, mtab: null,
   sel: new Set(), cur: null, source: { kind: 'all' }, lastImport: null,
   filter: { q: '', rating: 0, flag: 'all', label: 'any', sort: 'capture', cell: 190 },
   tool: null, zoom: 0, center: [0.5, 0.5], compare: 'off', split: 0.5, showClip: false, stageBg: 'mid',
@@ -209,7 +241,7 @@ function setView(v) {
 function renderAll() {
   if (S.view === 'library') { renderLibLeft(); renderLibCenter(); renderLibRight(); }
   else { renderEditLeft(); renderEditCenter(); renderEditRight(); }
-  renderStrip();
+  renderStrip(); renderTabbar();
 }
 function section(id, title, body, opts = {}) {
   let closed = false; try { closed = localStorage.getItem('safelight.sec.' + id) === '0'; } catch (e) {}
@@ -218,8 +250,12 @@ function section(id, title, body, opts = {}) {
   const head = h('h3', { onclick: (e) => { if (e.target.closest('.act')) return; el.classList.toggle('closed'); try { localStorage.setItem('safelight.sec.' + id, el.classList.contains('closed') ? '0' : '1'); } catch (e2) {} } },
     h('span', { class: 'dot' }), title, opts.action || null, h('span', { class: 'chev', html: '&#9662;' }));
   el.append(head, h('div', { class: 'body' }, body));
+  el.dataset.tab = SEC_TAB[id] || 'none';
   return el;
 }
+const SEC_TAB = { catalog: 'albums', cols: 'albums', kw: 'albums', quick: 'info', meta: 'info', pcols: 'info', pact: 'info',
+  presets: 'looks', basic: 'light', curve: 'color', mixer: 'color', grading: 'color', calibration: 'color', effects: 'effects', detail: 'detail', lens: 'detail', transform: 'detail',
+  croptool: 'tools', healtool: 'tools', masktool: 'tools', snaps: 'history', hist: 'history', photoAct: 'history' };
 
 /* ============================== library: left ============================== */
 function renderLibLeft() {
@@ -241,6 +277,7 @@ function renderLibLeft() {
       h('button', { class: 'btn sm', onclick: () => smartDlg() }, '+ Smart collection')))));
   const kw = {}; S.photos.forEach(p => p.keywords.forEach(k => kw[k] = (kw[k] || 0) + 1));
   const kws = Object.keys(kw).sort();
+  setTimeout(applyMobile, 0);
   L.append(section('kw', 'Keywords', h('div', { class: 'list' }, kws.length ? kws.map(k => item(k, { kind: 'kw', id: k }, kw[k])) : h('div', { class: 'empty', text: 'Keywords you add to photos appear here.' }))));
 }
 function newCollectionDlg() {
@@ -284,7 +321,8 @@ function renderLibCenter() {
     sel('libLabel', [['any', 'Any label'], ...Object.keys(LABELS).map(k => [k, k[0].toUpperCase() + k.slice(1)])], f.label, v => f.label = v),
     sel('libSort', [['capture', 'Sort: capture time'], ['import', 'Sort: import order'], ['name', 'Sort: file name'], ['rating', 'Sort: rating']], f.sort, v => f.sort = v),
     h('input', { type: 'range', id: 'libSize', min: 120, max: 320, value: f.cell, style: { width: '90px' }, 'aria-label': 'Thumbnail size', oninput: (e) => { f.cell = +e.target.value; $('#grid').style.setProperty('--cell', f.cell + 'px'); } }),
-    h('span', { class: 'count', id: 'libCount' }));
+    h('span', { class: 'count', id: 'libCount' }),
+    h('button', { class: 'btn sm monly' + (S.selectMode ? ' on' : ''), onclick: () => { S.selectMode = !S.selectMode; document.body.classList.toggle('selmode', S.selectMode); if (!S.selectMode && S.cur) S.sel = new Set([S.cur]); renderLibCenter(); renderTabbar(); } }, S.selectMode ? `Done (${S.sel.size})` : 'Select'));
   const grid = h('div', { class: 'grid', id: 'grid', style: { '--cell': f.cell + 'px' } });
   C.append(bar, grid);
   setupDrop(C);
@@ -302,8 +340,9 @@ function renderGrid() {
   for (const p of list) {
     const ed = isEdited(p.edits);
     const cell = h('div', { class: 'cell' + (S.sel.has(p.id) ? ' sel' : '') + (S.cur === p.id ? ' cur' : '') + (p.flag === -1 ? ' rej' : ''), tabindex: 0,
-      onclick: (e) => selectPhoto(p.id, e, list), ondblclick: () => { S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); } },
+      onclick: (e) => { if (isMobile()) { if (S.selectMode) { S.sel.has(p.id) ? S.sel.delete(p.id) : S.sel.add(p.id); S.cur = p.id; renderGrid(); renderStrip(); } else { S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); } return; } selectPhoto(p.id, e, list); }, ondblclick: () => { S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); } },
       h('div', { class: 'thumb' }, h('img', { src: p.thumb, alt: p.title || p.name, loading: 'lazy', draggable: 'false' })),
+      p.rating ? h('span', { class: 'mstar monly', text: '★'.repeat(p.rating) }) : null,
       h('div', { class: 'nm', text: p.title || p.name }),
       h('div', { class: 'ft' }, stars(p, r => setMeta([p.id], x => x.rating = r)),
         p.label ? h('span', { class: 'lbl', style: { background: LABELS[p.label] }, title: p.label }) : null,
@@ -329,7 +368,7 @@ function selectPhoto(id, e, list) {
 
 /* ============================== library: right ============================== */
 function renderLibRight() {
-  const R = $('#right'); R.innerHTML = '';
+  const R = $('#right'); R.innerHTML = ''; setTimeout(applyMobile, 0);
   const p = ph();
   const ids = [...S.sel];
   const qd = (label, fn) => h('button', { class: 'btn sm', onclick: () => quickDevelop(ids, fn) }, label);
@@ -457,7 +496,7 @@ async function openCurrent() {
   if (img) engine.freeImage(img);
   img = engine.loadImage(src); imgFor = p.id;
   if (p.raw && src.half && p.rawMode !== 'full') { p.rawMode = 'full'; savePhoto(p); }
-  brushState = null; S.zoom = 0; S.center = [0.5, 0.5]; S.selMask = -1; S.selSpot = -1; S.lastPreset = null;
+  brushState = null; S.zoom = 0; S.center = [0.5, 0.5]; S.selMask = -1; S.selSpot = -1;
   renderEditLeft(); renderEditRight(); renderStrip(); updateStagebar(); layoutStage(); requestRender();
 }
 function finishEditing(id) {
@@ -560,7 +599,7 @@ function arrSlider(key, i, label, min, max, opts = {}) {
 }
 function markMods() {
   const p = P(); if (!p) return;
-  const groupsFor = { basic: ['treatment', 'wb', 'tone', 'presence'], curve: ['curve'], mixer: ['mixer'], grading: ['grading'], detail: ['detail'], lens: ['lens'], transform: ['transform'], effects: ['effects'], calibration: ['calibration'] };
+  const groupsFor = { basic: ['treatment', 'wb', 'tone', 'presence'], curve: ['curve'], mixer: ['mixer'], grading: ['grading'], detail: ['detail'], lens: ['lens'], transform: ['transform'], effects: ['effects', 'lut'], calibration: ['calibration'] };
   for (const [sec, gs] of Object.entries(groupsFor)) {
     const el = document.getElementById('sec-' + sec); if (!el) continue;
     el.classList.toggle('mod', gs.some(g => GROUPS[g][1].some(k => !isDefault(k, p[k]))));
@@ -583,19 +622,19 @@ const ICONS = {
 function renderEditRight() {
   const R = $('#right'); const st = R.scrollTop; R.innerHTML = '';
   if (!ph()) return;
-  const histo = h('div', { class: 'histo' }, h('div', { class: 'clipb' }, h('canvas', { id: 'histo', width: 576, height: 184 }),
+  const histo = h('div', { class: 'histo', 'data-tab': 'light' }, h('div', { class: 'clipb' }, h('canvas', { id: 'histo', width: 576, height: 184 }),
     h('button', { class: 'clipdot l' + (S.showClip ? ' on' : ''), title: 'Show clipping (J)', 'aria-label': 'Show shadow clipping', onclick: toggleClip }),
     h('button', { class: 'clipdot r' + (S.showClip ? ' on' : ''), title: 'Show clipping (J)', 'aria-label': 'Show highlight clipping', onclick: toggleClip })),
     h('div', { class: 'meta', id: 'histoMeta' }));
   R.append(histo);
   const tb = (id, label, key) => h('button', { class: S.tool === id ? 'on' : '', title: `${label} (${key})`, onclick: () => setTool(S.tool === id ? null : id), html: ICONS[id] + `<span>${label}</span>` });
-  R.append(h('div', { class: 'tools' }, tb('crop', 'Crop', 'R'), tb('heal', 'Heal', 'Q'), tb('mask', 'Masks', 'M'), tb('wb', 'WB pick', 'W'),
+  R.append(h('div', { class: 'tools', 'data-tab': 'tools' }, tb('crop', 'Crop', 'R'), tb('heal', 'Heal', 'Q'), tb('mask', 'Masks', 'M'), tb('wb', 'WB pick', 'W'),
     h('button', { class: S.showClip ? 'on' : '', title: 'Clipping (J)', onclick: toggleClip, html: ICONS.clip + '<span>Clipping</span>' })));
   if (S.tool === 'crop') R.append(cropPanel());
   if (S.tool === 'heal') R.append(healPanel());
   if (S.tool === 'mask') R.append(maskPanel());
   R.append(basicPanel(), curvePanel(), mixerPanel(), gradingPanel(), detailPanel(), lensPanel(), transformPanel(), effectsPanel(), calibrationPanel());
-  markMods(); drawHistogram(); R.scrollTop = st;
+  markMods(); drawHistogram(); R.scrollTop = st; applyMobile();
 }
 function toggleClip() { S.showClip = !S.showClip; document.querySelectorAll('.clipdot').forEach(d => d.classList.toggle('on', S.showClip)); const t = [...document.querySelectorAll('.tools button')].pop(); t && t.classList.toggle('on', S.showClip); requestRender(); }
 
@@ -750,10 +789,21 @@ function transformPanel() {
     pSlider('tAspect', 'Aspect', -100, 100, 1), pSlider('tScale', 'Scale', 50, 150, 1, { fmt: v => v + '%' }), pSlider('tX', 'Offset X', -100, 100, 1), pSlider('tY', 'Offset Y', -100, 100, 1)], { action: resetAct(['transform'], 'transform') });
 }
 function effectsPanel() {
+  const e = P();
+  const lb = h('select', { id: 's-letterbox', onchange: (ev) => { P().letterbox = +ev.target.value; commit('Letterbox'); requestRender(); } },
+    [[0, 'Off'], [1.66, '1.66 : 1'], [1.85, '1.85 : 1 (flat)'], [2, '2 : 1'], [2.2, '2.20 : 1 (70 mm)'], [2.39, '2.39 : 1 (scope)'], [2.76, '2.76 : 1 (ultra wide)'], [1, '1 : 1 (pillarbox)'], [1.33, '4 : 3 (pillarbox)']].map(([v, t]) => h('option', { value: v, text: t })));
+  lb.value = String(e.letterbox || 0); if (lb.value === '' ) lb.value = '0';
+  const lutRow = e.lut && S.luts.find(l => l.id === e.lut.id);
   return section('effects', 'Effects', [h('div', { class: 'sub', style: { marginTop: 0 }, text: 'Vignette (after crop)' }),
     pSlider('vig', 'Amount', -100, 100, 1), pSlider('vigMid', 'Midpoint', 0, 100, 1, { fmt: v => v }), pSlider('vigRound', 'Roundness', -100, 100, 1), pSlider('vigFeather', 'Feather', 0, 100, 1, { fmt: v => v }), pSlider('vigHigh', 'Highlights', 0, 100, 1, { fmt: v => v }),
     h('div', { class: 'sub', text: 'Grain' }),
-    pSlider('grain', 'Amount', 0, 100, 1, { fmt: v => v }), pSlider('grainSize', 'Size', 0, 100, 1, { fmt: v => v }), pSlider('grainRough', 'Roughness', 0, 100, 1, { fmt: v => v })], { action: resetAct(['effects'], 'effects') });
+    pSlider('grain', 'Amount', 0, 100, 1, { fmt: v => v }), pSlider('grainSize', 'Size', 0, 100, 1, { fmt: v => v }), pSlider('grainRough', 'Roughness', 0, 100, 1, { fmt: v => v }), pSlider('grainColor', 'Color grain', 0, 100, 1, { fmt: v => v }),
+    h('div', { class: 'sub', text: 'Film light' }),
+    pSlider('halation', 'Halation', 0, 100, 1, { fmt: v => v, track: 'linear-gradient(90deg,var(--raise),#e0552c)' }), pSlider('glow', 'Diffusion glow', 0, 100, 1, { fmt: v => v }),
+    h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Letterbox' }), lb),
+    lutRow ? h('div', {}, h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'LUT: ' + lutRow.name }), h('button', { class: 'btn sm ghost', onclick: () => { P().lut = null; commit('Remove LUT'); renderEditRight(); requestRender(); } }, 'Remove')),
+      slider('s-lutAmt', 'LUT amount', 0, 100, 1, () => P().lut ? P().lut.amount : 100, (v) => { P().lut.amount = v; requestRender(); }, { def: 100, fmt: v => Math.round(v) + '%', onCommit: () => commit('LUT amount') })) : null],
+    { action: resetAct(['effects', 'lut'], 'effects') });
 }
 function calibrationPanel() {
   return section('calibration', 'Calibration', [pSlider('calShadow', 'Shadows tint', -100, 100, 1, { track: 'linear-gradient(90deg,#4fb548,#888 50%,#c64bb4)' }),
@@ -928,17 +978,7 @@ function renderEditLeft() {
   const p = ph(); if (!p) return;
   L.append(section('nav', 'Navigator', h('div', { class: 'nav' }, h('canvas', { id: 'navCv', width: 440, height: 300, 'aria-label': 'Navigator: click to move the zoomed view' }),
     h('div', { class: 'row', style: { marginTop: '8px' } }, h('div', { class: 'seg' }, [[0, 'Fit'], [0.5, '50%'], [1, '100%'], [2, '200%']].map(([z, t]) => h('button', { class: S.zoom === z ? 'on' : '', onclick: () => { S.zoom = z; layoutStage(); requestRender(); renderEditLeft(); } }, t)))))));
-  // presets
-  const groups = {}; [...BUILTIN, ...S.userPresets].forEach(pr => (groups[pr.group] = groups[pr.group] || []).push(pr));
-  const plist = h('div', { class: 'list' });
-  Object.entries(groups).forEach(([g, items]) => {
-    plist.append(h('div', { class: 'sub', text: g }));
-    items.forEach(pr => plist.append(h('button', { class: 'li', onclick: () => applyPreset(pr), title: 'Apply preset' }, h('span', { class: 't', text: pr.name }),
-      pr.builtin ? null : h('button', { class: 'x', 'aria-label': 'Delete preset ' + pr.name, onclick: (e) => { e.stopPropagation(); confirmDlg(`Delete the preset “${pr.name}”?`, 'Delete', () => { S.userPresets = S.userPresets.filter(x => x !== pr); U.DB.del('presets', pr.id); renderEditLeft(); }); } }, '×'))));
-  });
-  const amt = S.lastPreset ? slider('s-presetAmt', 'Amount', 0, 200, 1, () => S.lastPreset.amount, (v) => { S.lastPreset.amount = v; blendPreset(); }, { def: 100, fmt: v => v + '%', onCommit: () => commit(`Preset amount ${S.lastPreset.amount}%`) }) : null;
-  L.append(section('presets', 'Presets', [amt ? h('div', {}, h('div', { class: 'sub', style: { marginTop: 0 }, text: 'Applied: ' + S.lastPreset.name }), amt) : null, plist,
-    h('div', { class: 'row', style: { marginTop: '6px' } }, h('button', { class: 'btn sm', onclick: savePresetDlg }, '+ Save current as preset'))]));
+  L.append(looksSection());
   // snapshots
   L.append(section('snaps', 'Snapshots', [h('div', { class: 'list' }, p.snapshots.length ? p.snapshots.map((s, i) => h('button', { class: 'li', onclick: () => { p.edits = U.clone(s.edits); invalidateBrush(); commit('Snapshot: ' + s.name); renderEditRight(); requestRender(); } }, h('span', { class: 't', text: s.name }), h('span', { class: 'n', text: new Date(s.at).toLocaleDateString() }),
     h('button', { class: 'x', 'aria-label': 'Delete snapshot', onclick: (e) => { e.stopPropagation(); p.snapshots.splice(i, 1); savePhoto(p); renderEditLeft(); } }, '×'))) : h('div', { class: 'empty', text: 'Save versions of this edit to compare or return to later.' })),
@@ -947,7 +987,7 @@ function renderEditLeft() {
   L.append(section('photoAct', 'Photo', h('div', { class: 'row' },
     h('button', { class: 'btn sm', onclick: () => { P() && Object.assign(p.edits, defaults()); invalidateBrush(); commit('Reset all'); renderEditRight(); requestRender(); } }, 'Reset all'),
     h('button', { class: 'btn sm', onclick: () => virtualCopy(p) }, 'Virtual copy'))));
-  renderHistory(); drawNavigator(); L.scrollTop = st;
+  renderHistory(); drawNavigator(); L.scrollTop = st; applyMobile();
 }
 function renderHistory() {
   const el = $('#histList'); const p = ph(); if (!el || !p) return; el.innerHTML = '';
@@ -955,22 +995,123 @@ function renderHistory() {
     el.append(h('button', { class: 'li' + (i === p.hIndex ? ' on' : ''), style: i > p.hIndex ? { opacity: 0.5 } : null, onclick: () => gotoHistory(i) }, h('span', { class: 't', text: p.history[i].label })));
   }
 }
-function applyPreset(pr) {
-  const p = P(); const base = U.clone(p);
-  for (const [k, v] of Object.entries(pr.values)) p[k] = U.clone(v);
-  S.lastPreset = { name: pr.name, base, applied: U.clone(p), amount: 100 };
-  commit('Preset: ' + pr.name); renderEditLeft(); renderEditRight(); requestRender();
+/* ============================== looks (presets, film looks, LUTs) ============================== */
+const allLooks = () => [...BUILTIN, ...S.userPresets.map(p => Object.assign({ group: 'My presets' }, p)), ...S.luts.map(l => ({ id: 'lut:' + l.id, group: 'LUTs', name: l.name, values: { lut: { id: l.id, amount: 100 } }, lutId: l.id }))];
+const findLook = (id) => allLooks().find(l => l.id === id);
+const DISCRETE = new Set(['bw', 'letterbox', 'crop', 'orient', 'flipH', 'flipV', 'masks', 'spots']);
+function mixVal(k, a, b, t) {
+  if (k === 'lut') return b ? { id: b.id, amount: (b.amount == null ? 100 : b.amount) * t } : (t >= 0.5 ? b : a);
+  if (DISCRETE.has(k)) return U.clone(t > 0.001 ? b : a);
+  if (typeof a === 'number' && typeof b === 'number') return /H$/.test(k) && /^g/.test(k) ? (t > 0.001 ? b : a) : a + (b - a) * t;
+  if (Array.isArray(a) && Array.isArray(b) && typeof a[0] === 'number' && a.length === b.length) return a.map((x, i) => x + (b[i] - x) * t);
+  if (k === 'curve') { const o = {}; for (const ch of ['rgb', 'r', 'g', 'b']) { const ca = a[ch], cb = b[ch]; o[ch] = JSON.stringify(ca) === JSON.stringify(cb) ? U.clone(ca) : cb.map(([x, y]) => [x, U.clamp(x + (y - x) * t, 0, 1)]); } return o; }
+  return U.clone(t >= 0.5 ? b : a);
 }
-function blendPreset() {
-  const lp = S.lastPreset, p = P(), t = lp.amount / 100;
-  for (const k of Object.keys(DEF)) {
-    const a = lp.base[k], b = lp.applied[k];
-    if (typeof a === 'number' && typeof b === 'number') p[k] = a + (b - a) * t;
-    else if (Array.isArray(a) && typeof a[0] === 'number' && a.length === b.length) p[k] = a.map((x, i) => x + (b[i] - x) * t);
-    else if (k === 'curve') { const o = {}; for (const ch of ['rgb', 'r', 'g', 'b']) { const ca = a[ch], cb = b[ch]; o[ch] = JSON.stringify(ca) === JSON.stringify(cb) ? U.clone(ca) : cb.map(([x, y]) => [x, U.clamp(x + (y - x) * t, 0, 1)]); } p[k] = o; }
-    else p[k] = U.clone(t >= 0.5 ? b : a);
+function stripLook(e) { if (e.look) { for (const [k, v] of Object.entries(e.look.base)) e[k] = U.clone(v); e.look = null; } return e; }
+function blendLook(e, look) { const t = e.look.amount / 100; for (const [k, v] of Object.entries(look.values)) e[k] = mixVal(k, e.look.base[k], v, t); return e; }
+function applyLookTo(e, look, amount = 100) {
+  stripLook(e);
+  if (!look) return e;
+  const base = {}; Object.keys(look.values).forEach(k => base[k] = U.clone(e[k]));
+  e.look = { id: look.id, name: look.name, base, amount };
+  return blendLook(e, look);
+}
+function applyPreset(look) {
+  const e = P(); if (!e) return;
+  applyLookTo(e, look); invalidateBrush();
+  commit(look ? 'Look: ' + look.name : 'Remove look'); renderEditLeft(); renderEditRight(); requestRender();
+}
+function setLookAmount(v) {
+  const e = P(); if (!e || !e.look) return; const look = findLook(e.look.id); if (!look) return;
+  e.look.amount = v; blendLook(e, look); requestRender();
+  clearTimeout(setLookAmount.t); setLookAmount.t = setTimeout(() => { renderEditRight(); }, 150);
+}
+const lookThumbs = new Map(); let thumbQueue = [], thumbBusy = false;
+function strHash(s) { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return (x >>> 0).toString(36); }
+function queueLookThumbs(tiles) {
+  thumbQueue = tiles; if (!thumbBusy) pumpThumbs();
+}
+function pumpThumbs() {
+  if (!thumbQueue.length || !img || S.view !== 'edit') { thumbBusy = false; return; }
+  thumbBusy = true;
+  const t0 = performance.now();
+  while (thumbQueue.length && performance.now() - t0 < 24) {
+    const { look, el, key } = thumbQueue.shift();
+    if (!el.isConnected) continue;
+    if (lookThumbs.has(key)) { el.src = lookThumbs.get(key); continue; }
+    try {
+      const e = applyLookTo(U.clone(P()), look);
+      e.masks = P().masks; e.spots = [];
+      const id = engine.renderSmall(img, e, 150, currentBrush());
+      const c = document.createElement('canvas'); c.width = id.width; c.height = id.height; c.getContext('2d').putImageData(id, 0, 0);
+      const url = c.toDataURL('image/jpeg', 0.75); lookThumbs.set(key, url); el.src = url;
+      if (lookThumbs.size > 400) lookThumbs.delete(lookThumbs.keys().next().value);
+    } catch (err) { console.error(err); }
   }
-  requestRender(); clearTimeout(blendPreset.t); blendPreset.t = setTimeout(() => renderEditRight(), 120);
+  setTimeout(pumpThumbs, 16);
+}
+function looksSection() {
+  const p = ph(), e = P();
+  const looks = allLooks();
+  const groups = [...new Set(looks.map(l => l.group))];
+  if (!S.lookGroup || !groups.includes(S.lookGroup)) S.lookGroup = groups[0];
+  const chips = h('div', { class: 'chips', role: 'tablist' }, groups.map(g => h('button', { class: 'chip' + (S.lookGroup === g ? ' on' : ''), role: 'tab', onclick: () => { S.lookGroup = g; renderEditLeft(); } }, g)));
+  const base = stripLook(U.clone(e)); base.spots = [];
+  const bkey = p.id + '|' + strHash(JSON.stringify(base));
+  const tiles = [];
+  const tile = (look, label) => {
+    const im = h('img', { alt: '', src: p.thumb });
+    const on = look ? (e.look && e.look.id === look.id) : !e.look;
+    const b = h('button', { class: 'look' + (on ? ' on' : ''), title: label, onclick: () => applyPreset(look) }, h('span', { class: 'lim' }, im), h('span', { class: 'ln', text: label }),
+      look && (look.group === 'My presets' || look.lutId) ? h('span', { class: 'lx', role: 'button', 'aria-label': 'Delete ' + label, onclick: (ev) => { ev.stopPropagation(); deleteLook(look); } }, '×') : null);
+    tiles.push({ look, el: im, key: bkey + '|' + (look ? look.id + '|' + strHash(JSON.stringify(look.values)) : 'none') });
+    return b;
+  };
+  const list = looks.filter(l => l.group === S.lookGroup);
+  const grid = h('div', { class: 'looks' }, tile(null, 'Original'), list.map(l => tile(l, l.name)));
+  const cur = e.look && findLook(e.look.id);
+  const amt = cur ? h('div', { class: 'lookamt' }, h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Look: ' + cur.name }), h('button', { class: 'btn sm ghost', onclick: () => applyPreset(null) }, 'Remove')),
+    slider('s-lookAmt', 'Intensity', 0, 150, 1, () => P().look ? P().look.amount : 100, setLookAmount, { def: 100, fmt: v => v + '%', onCommit: () => commit('Look intensity ' + Math.round(P().look.amount) + '%') })) : null;
+  const lutIn = h('input', { type: 'file', accept: '.cube', hidden: true, multiple: true, onchange: (ev) => { importLuts(ev.target.files); ev.target.value = ''; } });
+  const sec = section('presets', 'Looks', [amt, chips, grid,
+    h('div', { class: 'row', style: { marginTop: '6px' } }, h('button', { class: 'btn sm', onclick: savePresetDlg }, '+ Save as preset'), h('button', { class: 'btn sm', onclick: () => lutIn.click() }, 'Import LUT (.cube)'), lutIn)], { open: true });
+  setTimeout(() => queueLookThumbs(tiles), 30);
+  return sec;
+}
+function deleteLook(look) {
+  confirmDlg(`Delete “${look.name}”?`, 'Delete', async () => {
+    if (look.lutId) { S.luts = S.luts.filter(l => l.id !== look.lutId); await U.DB.del('luts', look.lutId); engine.removeLut(look.lutId); }
+    else { S.userPresets = S.userPresets.filter(x => x.id !== look.id); await U.DB.del('presets', look.id); }
+    renderEditLeft(); requestRender();
+  });
+}
+function parseCube(text) {
+  let size = 0, min = [0, 0, 0], max = [1, 1, 1]; const vals = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim(); if (!line || line[0] === '#') continue;
+    const parts = line.split(/\s+/);
+    if (/^LUT_3D_SIZE$/i.test(parts[0])) size = +parts[1];
+    else if (/^DOMAIN_MIN$/i.test(parts[0])) min = parts.slice(1, 4).map(Number);
+    else if (/^DOMAIN_MAX$/i.test(parts[0])) max = parts.slice(1, 4).map(Number);
+    else if (/^LUT_1D_SIZE$/i.test(parts[0])) throw new Error('1D LUTs are not supported; use a 3D .cube file.');
+    else if (/^[-+.\d]/.test(parts[0]) && parts.length >= 3) vals.push(+parts[0], +parts[1], +parts[2]);
+  }
+  if (!size || size < 2 || size > 65) throw new Error('This file has no valid LUT_3D_SIZE.');
+  if (vals.length < size ** 3 * 3) throw new Error('This LUT file is incomplete.');
+  const data = new Float32Array(size ** 3 * 3);
+  for (let i = 0; i < data.length; i++) { const c = i % 3; data[i] = U.clamp((vals[i] - min[c]) / ((max[c] - min[c]) || 1), 0, 1); }
+  return { size, data };
+}
+async function importLuts(files) {
+  let n = 0;
+  for (const f of files) {
+    try {
+      const { size, data } = parseCube(await f.text());
+      const rec = { id: U.uid(), name: f.name.replace(/\.cube$/i, ''), size, data };
+      await U.DB.put('luts', rec); engine.registerLut(rec.id, size, data); S.luts.push({ id: rec.id, name: rec.name, size }); n++;
+    } catch (e) { toast(`${f.name}: ${e.message}`, 4000); }
+  }
+  if (n) { S.lookGroup = 'LUTs'; renderEditLeft(); toast(`Imported ${n} LUT${n === 1 ? '' : 's'}. Pick one under LUTs.`); }
 }
 function savePresetDlg() {
   const name = h('input', { type: 'text', id: 'prName', value: 'My look' });
@@ -1006,10 +1147,17 @@ function updateStagebar() {
   const bar = $('#stagebar'); const p = ph(); if (!bar || !p) return; bar.innerHTML = '';
   const G = img ? Engine.geom(img, P(), false) : null;
   const seg = (items, val, on) => h('div', { class: 'seg' }, items.map(([v, t, title]) => h('button', { class: val === v ? 'on' : '', title: title || t, onclick: () => on(v) }, t)));
+  const step = (d) => { const list = visiblePhotos(); const i = list.findIndex(x => x.id === S.cur); const n = list[i + d]; if (n) selectPhoto(n.id, null, list); };
+  const hold = h('button', { class: 'btn sm monly', title: 'Hold to see the original' }, 'Hold: before');
+  const on = (e) => { e.preventDefault(); S.compareHold = true; requestRender(); }, off = () => { if (S.compareHold) { S.compareHold = false; requestRender(); } };
+  hold.addEventListener('pointerdown', on); hold.addEventListener('pointerup', off); hold.addEventListener('pointerleave', off); hold.addEventListener('pointercancel', off); hold.addEventListener('contextmenu', (e) => e.preventDefault());
+  bar.append(h('button', { class: 'btn sm monly', 'aria-label': 'Previous photo', onclick: () => step(-1) }, '‹'), h('button', { class: 'btn sm monly', 'aria-label': 'Next photo', onclick: () => step(1) }, '›'), hold,
+    h('button', { class: 'btn sm monly', 'aria-label': 'Undo', onclick: undo }, '↶'), h('button', { class: 'btn sm monly', 'aria-label': 'Redo', onclick: redo }, '↷'));
   bar.append(h('span', { class: 'name', text: p.title || p.name }), h('span', { class: 'info', text: G ? `${G.outW} × ${G.outH}${p.raw ? (p.rawMode === 'full' ? ' · RAW' : ' · RAW preview') : ''}` : '' }), h('span', { style: { flex: 1 } }),
     stars(p, r => { setMeta([p.id], x => x.rating = r); }),
     seg([['off', 'Edited', 'Show the edit'], ['split', 'Split', 'Before / after split (Y)'], ['before', 'Before', 'Show the original (\\)']], S.compare, (v) => { S.compare = v; updateStagebar(); requestRender(); }),
     seg([['dark', '◼', 'Dark surround'], ['mid', '◧', 'Grey surround'], ['light', '◻', 'Light surround']], S.stageBg, (v) => { S.stageBg = v; $('#center').style.background = STAGE_BG[v]; updateStagebar(); }));
+  bar.lastChild.classList.add('donly');
 }
 let lay = null;
 function layoutStage() {
@@ -1050,10 +1198,10 @@ function frameRender() {
   const showMask = S.tool === 'mask' && S.maskOverlay && S.selMask >= 0 && P().masks[S.selMask] && !(P().masks[S.selMask].type !== 'brush' && !P().masks[S.selMask].geom && P().masks[S.selMask].type !== 'range') ? S.selMask : -1;
   const opt = { view: lay.view, w: gc.width, h: gc.height, cropMode: lay.cropMode, showClip: S.showClip, showMask, brush: currentBrush() };
   try {
-    if (S.compare === 'before') engine.render(img, beforeParams(p), Object.assign({}, opt, { showMask: -1 }));
+    if (S.compare === 'before' || S.compareHold) engine.render(img, beforeParams(p), Object.assign({}, opt, { showMask: -1 }));
     else {
       engine.render(img, p, opt);
-      if (S.compare === 'split') { const sx = Math.round(gc.width * S.split); engine.render(img, beforeParams(p), Object.assign({}, opt, { showMask: -1, scissor: [0, 0, sx, gc.height] })); }
+      if (S.compare === 'split' && !S.compareHold) { const sx = Math.round(gc.width * S.split); engine.render(img, beforeParams(p), Object.assign({}, opt, { showMask: -1, scissor: [0, 0, sx, gc.height] })); }
     }
   } catch (e) { console.error(e); }
   drawOverlay();
@@ -1170,6 +1318,7 @@ function updateHint() {
 function setTool(t) {
   if (S.tool === 'crop' && t !== 'crop') commitIfChanged('Crop');
   S.tool = t; S.maskCreate = null; S.picking = null; hover = null;
+  if (t && isMobile() && t !== 'wb') { S.mtab = 'tools'; renderTabbar(); }
   if (t === 'mask' && S.selMask < 0 && P().masks.length) S.selMask = 0;
   renderEditRight(); layoutStage(); requestRender(); updateHint();
 }
@@ -1193,7 +1342,20 @@ function setupStagePointer(wrap) {
     }
   });
   wrap.addEventListener('pointerleave', () => { if (!drag) { hover = null; drawOverlay(); } });
+  const pts = new Map(); let pinch = null, lastTap = null;
+  const pinchInfo = () => { const r = wrap.getBoundingClientRect(); const a = [...pts.values()]; return { d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), mx: (a[0].x + a[1].x) / 2 - r.left, my: (a[0].y + a[1].y) / 2 - r.top }; };
+  wrap.addEventListener('pointerdown', (e) => { pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); }, true);
   wrap.addEventListener('pointerdown', (e) => {
+    if (pts.size === 2 && lay) {
+      if (drag && drag.kind === 'brush') { const m = P().masks[S.selMask]; if (m) { m.strokes.pop(); brushCanv.delete(ph().id + ':' + m.id); invalidateBrush(); } }
+      drag = null; const pi = pinchInfo(); const ov = $('#ov').getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+      const [u0, v0, u1, v1] = lay.view;
+      pinch = { ...pi, z0: S.zoom || (lay.w / lay.G.outW * lay.dpr), fit: lay.w / lay.G.outW * lay.dpr * (S.zoom ? 0 : 1) || null,
+        cu: u0 + (pi.mx - (ov.left - wr.left)) / ov.width * (u1 - u0), cv: v0 + (pi.my - (ov.top - wr.top)) / ov.height * (v1 - v0) };
+      if (!pinch.fit) { const G = lay.G; pinch.fit = Math.min((wrap.clientWidth - 32) / G.outW, (wrap.clientHeight - 32) / G.outH) * lay.dpr; }
+      requestRender(); return;
+    }
+    if (pts.size > 2) return;
     if (!lay || !img || e.button > 0) return;
     const [u, v, px, py] = evToOut(e); const p = P();
     const inside = px >= 0 && py >= 0 && px <= lay.w && py <= lay.h;
@@ -1211,6 +1373,17 @@ function setupStagePointer(wrap) {
     drag = { kind: 'pan', start };
   });
   wrap.addEventListener('pointermove', (e) => {
+    if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size >= 2) {
+      const pi = pinchInfo(); let z = pinch.z0 * pi.d / Math.max(pinch.d, 1);
+      if (z <= pinch.fit * 1.03) { S.zoom = 0; S.center = [0.5, 0.5]; }
+      else {
+        S.zoom = Math.min(z, 8); const G = lay.G, zc = S.zoom / lay.dpr, sw = wrap.clientWidth, sh = wrap.clientHeight;
+        const cw = Math.min(sw, G.outW * zc), ch = Math.min(sh, G.outH * zc);
+        S.center = [pinch.cu - (pi.mx - (sw - cw) / 2 - cw / 2) / (G.outW * zc), pinch.cv - (pi.my - (sh - ch) / 2 - ch / 2) / (G.outH * zc)];
+      }
+      requestRender(); return;
+    }
     if (!drag) return;
     const [u, v, px, py] = evToOut(e); const st = drag.start;
     if (Math.hypot(e.clientX - st.x, e.clientY - st.y) > 3) st.moved = true;
@@ -1223,8 +1396,15 @@ function setupStagePointer(wrap) {
     drag.move && drag.move(u, v, px, py, e);
   });
   const up = (e) => {
+    pts.delete(e.pointerId);
+    if (pinch) { if (pts.size < 2) { pinch = null; drawNavigator(); } drag = null; return; }
     if (!drag) return; const d = drag; drag = null;
     if (d.kind === 'pan' && !d.start.moved && !S.tool) {
+      if (e.pointerType !== 'mouse') {
+        const now = performance.now();
+        if (!(lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30)) { lastTap = { t: now, x: e.clientX, y: e.clientY }; return; }
+        lastTap = null;
+      }
       if (S.zoom) S.zoom = 0; else { S.zoom = 1; S.center = [d.start.u, d.start.v]; }
       layoutStage(); requestRender(); renderEditLeft(); return;
     }
@@ -1497,6 +1677,7 @@ async function start() {
   S.photos.forEach(p => { const d = defaults(); for (const k of Object.keys(d)) if (p.edits[k] === undefined) p.edits[k] = d[k]; });
   S.collections = await U.DB.all('collections');
   S.userPresets = await U.DB.all('presets');
+  for (const l of await U.DB.all('luts')) { try { engine.registerLut(l.id, l.size, l.data instanceof Float32Array ? l.data : new Float32Array(l.data)); S.luts.push({ id: l.id, name: l.name, size: l.size }); } catch (e) { console.error(e); } }
   const meta = await U.DB.get('meta', 'state');
   if (meta) { S.lastImport = meta.lastImport; }
   $('#mLib').onclick = () => setView('library'); $('#mEdit').onclick = () => setView('edit');
@@ -1516,4 +1697,65 @@ async function start() {
   let v = 'library'; try { v = localStorage.getItem('safelight.view') || 'library'; } catch (e) {}
   setView(v === 'edit' && S.photos.length ? 'edit' : 'library');
 }
+
+/* ============================== phone layout & installable app ============================== */
+const mq = matchMedia('(max-width: 760px)');
+const isMobile = () => mq.matches;
+const TAB_ICONS = {
+  photos: '<path d="M3 5h14v11H3z"/><path d="M3 13l4-4 3 3 2-2 5 5"/>',
+  albums: '<path d="M3 6h5l2 2h7v8H3z"/>',
+  info: '<circle cx="10" cy="10" r="7"/><path d="M10 9v5M10 6.5v.5"/>',
+  looks: '<circle cx="7.5" cy="8" r="4"/><circle cx="12.5" cy="8" r="4"/><circle cx="10" cy="12.5" r="4"/>',
+  light: '<circle cx="10" cy="10" r="3.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4"/>',
+  color: '<path d="M10 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9z"/>',
+  effects: '<path d="M3 14l9-9 3 3-9 9H3z"/><path d="M14 2l.7 1.6L16 4l-1.3.6L14 6l-.6-1.4L12 4l1.4-.4z"/>',
+  detail: '<circle cx="9" cy="9" r="5"/><path d="M13 13l4 4"/>',
+  tools: '<path d="M5 2v12h12"/><path d="M2 5h12v12"/>',
+  history: '<path d="M4 10a6 6 0 1 0 2-4.5"/><path d="M4 3v3h3M10 7v3l2 2"/>'
+};
+function renderTabbar() {
+  const tb = $('#tabbar'); if (!tb) return;
+  document.body.dataset.view = S.view;
+  const tabs = S.view === 'library' ? [['photos', 'Photos'], ['albums', 'Albums'], ['info', S.selectMode && S.sel.size > 1 ? `Info (${S.sel.size})` : 'Info']]
+    : [['looks', 'Looks'], ['light', 'Light'], ['color', 'Color'], ['effects', 'Effects'], ['detail', 'Optics'], ['tools', 'Tools'], ['history', 'History']];
+  if (!tabs.some(t => t[0] === S.mtab)) S.mtab = S.view === 'library' ? 'photos' : 'light';
+  tb.innerHTML = '';
+  tabs.forEach(([id, label]) => tb.append(h('button', { class: S.mtab === id ? 'on' : '', 'aria-pressed': S.mtab === id ? 'true' : 'false', onclick: () => { S.mtab = id; renderTabbar(); }, html: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${TAB_ICONS[id]}</svg><span>${label}</span>` })));
+  applyMobile();
+}
+function applyMobile() {
+  const mob = isMobile();
+  document.body.dataset.mtab = mob ? (S.mtab || '') : '';
+  document.body.classList.toggle('selmode', mob && !!S.selectMode);
+  for (const panel of [$('#left'), $('#right')]) {
+    if (!panel) continue;
+    let any = false;
+    for (const el of panel.children) {
+      const t = el.dataset.tab;
+      const show = !mob || (t && t === S.mtab);
+      el.hidden = !show; if (show) any = true;
+    }
+    panel.hidden = mob && !any;
+  }
+  if (mob && S.view === 'edit') requestAnimationFrame(() => { layoutStage(); requestRender(); });
+}
+mq.addEventListener('change', () => { if (!isMobile()) { S.selectMode = false; } renderAll(); });
+
+let installEvt = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('#bInstall') && $('#bInstall').classList.add('show'); });
+addEventListener('appinstalled', () => { installEvt = null; $('#bInstall') && $('#bInstall').classList.remove('show'); toast('Safelight is installed.'); });
+function setupInstall() {
+  const btn = $('#bInstall'); if (!btn) return;
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let inFrame = false; try { inFrame = window.top !== window; } catch (e) { inFrame = true; }
+  if (!standalone && ios && !inFrame) btn.classList.add('show');
+  btn.onclick = async () => {
+    if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (e) {} installEvt = null; btn.classList.remove('show'); return; }
+    dialog('Install Safelight', [h('p', { style: { margin: 0, lineHeight: 1.6 } }, 'On iPhone or iPad: tap the Share button in Safari, then ', h('b', {}, 'Add to Home Screen'), '. Safelight then opens full screen like an app and works offline.'),
+      h('p', { style: { margin: 0, lineHeight: 1.6, color: 'var(--muted)' } }, 'On Android: open the browser menu and choose Install app or Add to Home screen.')], null, null, { cancel: 'Close' });
+  };
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !inFrame) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+setupInstall();
 start();

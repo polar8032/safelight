@@ -29,13 +29,13 @@ U.h = function (tag, attrs, ...kids) {
 
 /* ---------- IndexedDB with in-memory fallback ---------- */
 U.DB = (() => {
-  const STORES = ['images', 'photos', 'collections', 'presets', 'meta'];
+  const STORES = ['images', 'photos', 'collections', 'presets', 'meta', 'luts'];
   const mem = {}; STORES.forEach(s => mem[s] = new Map());
   let db = null;
   function open() {
     return new Promise((res) => {
       try {
-        const rq = indexedDB.open('safelight', 1);
+        const rq = indexedDB.open('safelight', 2);
         rq.onupgradeneeded = () => { const d = rq.result; STORES.forEach(s => { if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: 'id' }); }); };
         rq.onsuccess = () => { db = rq.result; res(true); };
         rq.onerror = () => res(false);

@@ -1,4 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121315">
+<meta name="description" content="Safelight: a photo library and non-destructive photo editor with film looks, masks, healing and camera RAW support.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Safelight">
+<title>Safelight</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+</head>
+<body>
+<!-- artifact:start -->
 <title>Safelight</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,7 +45,8 @@
   --r: 6px;
 }
 html, body { height: 100%; }
-body { background: var(--bg); color: var(--fg); font: 13px/1.4 var(--f-ui); overflow: hidden; -webkit-font-smoothing: antialiased; }
+html { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 var(--f-ui); overflow: hidden; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
 * { box-sizing: border-box; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -197,29 +215,110 @@ textarea { resize: vertical; width: 100%; }
 .busy { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(10,10,12,.85); padding: 10px 16px; border-radius: 8px; font-size: 12px; z-index: 4; }
 .ptoggle { display: none; }
 
-@media (max-width: 900px) {
-  body { overflow: auto; }
-  .app { height: auto; min-height: 100%; grid-template-columns: minmax(0,1fr); grid-template-rows: auto 62vh auto auto auto; grid-template-areas: "top" "center" "strip" "right" "left"; }
-  .top { flex-wrap: wrap; padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+/* looks */
+.chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); border-radius: 999px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.looks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.look { position: relative; border: 0; background: none; padding: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; color: var(--muted); min-width: 0; }
+.look .lim { display: block; aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: var(--bg); outline: 2px solid transparent; outline-offset: 1px; }
+.look .lim img { width: 100%; height: 100%; object-fit: cover; display: block; max-width: none; }
+.look .ln { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.look:hover .ln { color: var(--fg); }
+.look.on .lim { outline-color: var(--accent); } .look.on .ln { color: var(--accent); }
+.look .lx { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,.65); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; opacity: 0; }
+.look:hover .lx, .look:focus-within .lx { opacity: 1; }
+.lookamt { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.monly { display: none !important; }
+.tabbar { display: none; }
+.install { display: none; }
+.install.show { display: inline-flex; }
+
+@media (max-width: 1100px) and (min-width: 761px) {
+  .app { grid-template-columns: 220px minmax(0,1fr) 290px; }
+}
+
+/* ---------- phone layout: photo on top, one tool sheet, tab bar at the bottom ---------- */
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr) auto auto; grid-template-areas: "top" "center" "sheet" "strip"; padding: 0; }
+  .top { height: auto; min-height: 50px; gap: 8px; padding-block: 6px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+  .mark { font-size: 20px; } .mark .wm { display: none; }
   .store-note { display: none; }
-  .left, .right { border: 0; border-top: 1px solid var(--line); overflow: visible; }
-  .strip { height: 104px; }
-  .grid { --cell: 140px !important; }
-  .libbar input[type=text] { width: 130px; }
+  .top .btn { padding: 7px 10px; }
+  .top .btn .bl { display: none; }
+  .modes button { padding: 6px 12px; }
+  .left, .right { grid-area: sheet; border: 0; border-top: 1px solid var(--line); max-height: 44vh; max-height: 44dvh; }
+  .left[hidden], .right[hidden] { display: none; }
+  body[data-view="library"]:not([data-mtab="photos"]) .center { display: none; }
+  body[data-view="library"]:not([data-mtab="photos"]) .left, body[data-view="library"]:not([data-mtab="photos"]) .right { grid-row: 2 / 4; max-height: none; }
+  .sec > h3 { cursor: default; padding: 12px 16px 6px; }
+  .sec > h3 .chev { display: none; }
+  .sec.closed > .body { display: flex; }
+  .body { padding: 2px 16px 16px; }
+  .sec { border-bottom: 0; }
+  .sl { grid-template-columns: 96px minmax(0,1fr) 46px; min-height: 40px; }
+  input[type=range] { height: 32px; }
+  input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -9.5px; }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; }
+  .btn.sm { padding: 6px 10px; font-size: 13px; }
+  .seg button { padding: 7px 11px; font-size: 13px; }
+  .tools { padding: 10px 16px; }
+  .tools button { padding: 10px 0 7px; }
+  .histo { padding: 10px 16px; } .histo canvas { height: 70px; }
+  .looks { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .look .lx { opacity: 1; }
+  .wheels { grid-template-columns: 1fr 1fr; }
+  .curvebox canvas { max-width: 300px; margin: 0 auto; }
+  .monly { display: inline-flex !important; } .donly { display: none !important; }
+  /* stage */
+  .stagebar { padding: 6px max(10px, env(safe-area-inset-left, 0px)); gap: 6px; flex-wrap: nowrap; overflow-x: auto; min-height: 44px; scrollbar-width: none; }
+  .stagebar::-webkit-scrollbar { display: none; }
+  .stagebar .name, .stagebar .info, .stagebar .stars { display: none; }
+  .stagebar .btn { padding: 6px 10px; }
+  .hint { bottom: 8px; }
+  /* library */
+  .libbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 8px 10px; }
+  .libbar::-webkit-scrollbar { display: none; }
+  .libbar input[type=text] { width: 150px; flex: none; }
+  .libbar select { flex: none; }
+  .libbar #libSize { display: none; }
+  .libbar .count { display: none; }
+  .grid { grid-template-columns: repeat(3, minmax(0,1fr)) !important; gap: 2px; padding: 2px; }
+  .cell { padding: 0; border: 0; border-radius: 0; background: var(--bg); }
+  .cell .nm, .cell .ft { display: none; }
+  .cell .thumb { border-radius: 0; }
+  .cell .thumb img { width: 100%; height: 100%; object-fit: cover; max-width: none; }
+  .cell.sel { box-shadow: inset 0 0 0 3px var(--accent); }
+  .cell.sel::after { content: "✓"; position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+  body:not(.selmode) .cell.sel { box-shadow: none; } body:not(.selmode) .cell.sel::after { display: none; }
+  .cell .mstar { position: absolute; left: 5px; bottom: 4px; font-size: 10px; color: var(--accent); text-shadow: 0 1px 2px #000; }
+  /* bottom tab bar replaces the filmstrip */
+  .strip { height: auto; border-top: 1px solid var(--line); }
+  .stripbar, .film { display: none; }
+  .tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr); padding: 4px max(4px, env(safe-area-inset-left, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)); }
+  .tabbar button { background: none; border: 0; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0 4px; font-size: 10.5px; min-width: 0; }
+  .tabbar button svg { width: 21px; height: 21px; }
+  .tabbar button.on { color: var(--accent); }
+  .tabbar button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .dlg { max-height: calc(100% - 24px); }
+  .dlg .grid2 { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
 <div class="app" id="app">
   <header class="top">
-    <div class="mark"><i></i>Safelight</div>
+    <div class="mark"><i></i><span class="wm">Safelight</span></div>
     <div class="modes" role="tablist">
       <button id="mLib" class="on" role="tab">Library</button>
       <button id="mEdit" role="tab">Edit</button>
     </div>
     <span class="store-note" id="storeNote"></span>
     <span class="sp"></span>
-    <button class="btn" id="bImport"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v9M4 7l4 4 4-4M2 14h12"/></svg>Import</button>
+    <button class="btn install" id="bInstall" title="Install Safelight as an app">Install</button>
+    <button class="btn" id="bImport"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v9M4 7l4 4 4-4M2 14h12"/></svg><span class="bl">Import</span></button>
     <button class="btn pri" id="bExport">Export</button>
     <input type="file" id="fileIn" multiple accept="image/*,.cr2,.cr3,.nef,.nrw,.arw,.srf,.sr2,.dng,.raf,.orf,.rw2,.pef,.srw,.x3f,.3fr,.iiq,.erf,.kdc,.mrw" hidden>
   </header>
@@ -229,9 +328,13 @@ textarea { resize: vertical; width: 100%; }
   <footer class="strip" id="strip">
     <div class="stripbar" id="stripbar"></div>
     <div class="film" id="film"></div>
+    <nav class="tabbar" id="tabbar" aria-label="Panels"></nav>
   </footer>
 </div>
 
 <script src="util.js"></script>
 <script src="engine.js"></script>
 <script src="app.js"></script>
+<!-- artifact:end -->
+</body>
+</html>
