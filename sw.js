@@ -1,5 +1,5 @@
 /* Safelight service worker: keeps the app usable offline. Photos live in IndexedDB, not here. */
-const CACHE = 'safelight-v3';
+const CACHE = 'safelight-v4';
 const SHELL = ['./', 'index.html', 'util.js', 'engine.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
   'vendor/libraw/index.js', 'vendor/libraw/worker.js', 'vendor/libraw/libraw.js', 'vendor/libraw/libraw.wasm'];

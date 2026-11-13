@@ -597,6 +597,10 @@ function fmtVal(v, step) { if (step < 0.1) return (v > 0 ? '+' : '') + v.toFixed
 /* Touch-safe slider: vertical swipes scroll the panel; only a deliberate sideways drag changes the value,
    and it moves relative to where it was (a tap never makes it jump). Mouse can click-to-set and drag. */
 const ease = (t) => 1 - Math.pow(1 - t, 3);
+let lastPanelScroll = 0;
+// keep iOS from zooming the whole page when pinching over the panels (the photo has its own pinch zoom)
+['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
+addEventListener('scroll', () => { lastPanelScroll = performance.now(); }, { capture: true, passive: true });
 function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 function slider(id, label, min, max, step, get, set, opts = {}) {
   const def = opts.def !== undefined ? opts.def : 0;
@@ -631,7 +635,8 @@ function slider(id, label, min, max, step, get, set, opts = {}) {
   track.addEventListener('pointerdown', (e) => {
     if (e.button > 0) return; cancelAnimationFrame(anim);
     const r = track.getBoundingClientRect();
-    st = { id: e.pointerId, x: e.clientX, y: e.clientY, v0: cur, start: cur, w: r.width, active: false, t: performance.now() };
+    const panel = track.closest('.left, .right, .dlg');
+    st = { id: e.pointerId, x: e.clientX, y: e.clientY, v0: cur, start: cur, w: r.width, active: false, t: performance.now(), panel, sc0: panel ? panel.scrollTop : 0, touch: e.pointerType !== 'mouse' };
     if (e.pointerType === 'mouse') {
       st.active = true; track.setPointerCapture(e.pointerId); begin();
       const tx = r.left + frac(cur) * r.width;
@@ -641,11 +646,15 @@ function slider(id, label, min, max, step, get, set, opts = {}) {
   track.addEventListener('pointermove', (e) => {
     if (!st || e.pointerId !== st.id) return;
     const dx = e.clientX - st.x, dy = e.clientY - st.y;
+    const scrolled = st.panel && Math.abs(st.panel.scrollTop - st.sc0) > 1;
     if (!st.active) {
-      if (Math.abs(dx) > 7 && Math.abs(dx) > Math.abs(dy) * 1.4) { st.active = true; st.x = e.clientX; st.v0 = cur; try { track.setPointerCapture(st.id); } catch (er) {} begin(); }
-      else if (Math.abs(dy) > 7) st = null;
+      // decide once, from the first 10 px of movement: clearly sideways = adjust; anything else = this gesture belongs to scrolling
+      if (Math.hypot(dx, dy) < 10) return;
+      if (!scrolled && Math.abs(dx) > Math.abs(dy) * 2.2 && performance.now() - lastPanelScroll > 250) { st.active = true; st.x = e.clientX; st.v0 = cur; try { track.setPointerCapture(st.id); } catch (er) {} begin(); }
+      else st = null;
       return;
     }
+    if (st.touch && scrolled) { setVal(st.start); requestRender(); st = null; end(false); return; }
     let v = st.v0 + dx / st.w * (max - min);
     const snap = (max - min) * 0.012;
     if (def >= min && def <= max && Math.abs(v - def) < snap) { if (!st.snapped) { buzz(6); st.snapped = true; } v = def; } else st.snapped = false;
@@ -654,11 +663,12 @@ function slider(id, label, min, max, step, get, set, opts = {}) {
   const up = (e) => {
     if (!st || e.pointerId !== st.id) return; const s0 = st; st = null;
     if (s0.active) { end(cur !== s0.start); return; }
-    if (e.type === 'pointerup' && e.pointerType !== 'mouse' && performance.now() - s0.t < 300) {
+    if (e.type === 'pointerup' && e.pointerType !== 'mouse' && performance.now() - s0.t < 300 && performance.now() - lastPanelScroll > 400 && !(s0.panel && Math.abs(s0.panel.scrollTop - s0.sc0) > 1)) {
       const now = performance.now(); if (now - lastTap < 320) { lastTap = 0; animateTo(def, true); } else lastTap = now;
     }
   };
   track.addEventListener('pointerup', up); track.addEventListener('pointercancel', up);
+  track.addEventListener('touchmove', (e) => { if (st && st.active) e.preventDefault(); }, { passive: false });
   track.addEventListener('dblclick', () => animateTo(def, true));
   track.addEventListener('keydown', (e) => {
     const big = e.shiftKey ? 10 : 1; let v = cur;
@@ -814,7 +824,7 @@ function setupCurve(cv) {
   });
   const up = (e) => {
     if (drag >= 0) { drag = -1; S.interacting = false; requestRender(); commit('Tone curve'); return; }
-    if (st && e.type === 'pointerup' && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8 && performance.now() - st.t < 350) { const [x, y] = pos(e.clientX, e.clientY); addAt(x, y); drawCurve(cv); requestRender(); commit('Tone curve'); }
+    if (st && e.type === 'pointerup' && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8 && performance.now() - st.t < 350 && performance.now() - lastPanelScroll > 400) { const [x, y] = pos(e.clientX, e.clientY); addAt(x, y); drawCurve(cv); requestRender(); commit('Tone curve'); }
     st = null;
   };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
@@ -867,7 +877,7 @@ function wheel(key, label, big) {
   cv.addEventListener('pointermove', (e) => dragging && set(e));
   const up = (e) => {
     if (dragging) { dragging = false; S.interacting = false; requestRender(); commit(label + ' color'); return; }
-    if (st && e.type === 'pointerup' && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8 && performance.now() - st.t < 350) { set(e); commit(label + ' color'); }
+    if (st && e.type === 'pointerup' && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 8 && performance.now() - st.t < 350 && performance.now() - lastPanelScroll > 400) { set(e); commit(label + ' color'); }
     st = null;
   };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
@@ -1217,7 +1227,7 @@ function looksSection() {
   const tile = (look, label) => {
     const im = h('img', { alt: '', src: p.thumb });
     const on = look ? (e.look && e.look.id === look.id) : !e.look;
-    const b = h('button', { class: 'look' + (on ? ' on' : ''), title: label, onclick: () => applyPreset(look) }, h('span', { class: 'lim' }, im), h('span', { class: 'ln', text: label }),
+    const b = h('button', { class: 'look' + (on ? ' on' : ''), title: label, onclick: () => { if (performance.now() - lastPanelScroll < 180) return; applyPreset(look); } }, h('span', { class: 'lim' }, im), h('span', { class: 'ln', text: label }),
       look && (look.group === 'My presets' || look.lutId) ? h('span', { class: 'lx', role: 'button', 'aria-label': 'Delete ' + label, onclick: (ev) => { ev.stopPropagation(); deleteLook(look); } }, '×') : null);
     tiles.push({ look, el: im, key: bkey + '|' + (look ? look.id + '|' + strHash(JSON.stringify(look.values)) : 'none') });
     return b;
@@ -1400,7 +1410,7 @@ function evToOut(e) {
 function outToPx(u, v) { const [u0, v0, u1, v1] = lay.view; return [(u - u0) / (u1 - u0) * lay.w, (v - v0) / (v1 - v0) * lay.h]; }
 function srcToPx(su, sv) { const o = Engine.srcToOut(lay.G, su, sv); return outToPx(o[0], o[1]); }
 const As = () => img.w / img.h;
-let hover = null;
+let hover = null, touchTol = false;
 function drawOverlay() {
   const ov = $('#ov'); if (!ov || !lay) return;
   const g = ov.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ov.width, ov.height);
@@ -1498,12 +1508,14 @@ function setupStagePointer(wrap) {
     }
   });
   wrap.addEventListener('pointerleave', () => { if (!drag) { hover = null; drawOverlay(); } });
-  const pts = new Map(); let pinch = null, lastTap = null;
+  const pts = new Map(); let pinch = null, lastTap = null, pending = null, afterPinch = false;
   const pinchInfo = () => { const r = wrap.getBoundingClientRect(); const a = [...pts.values()]; return { d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), mx: (a[0].x + a[1].x) / 2 - r.left, my: (a[0].y + a[1].y) / 2 - r.top }; };
   wrap.addEventListener('pointerdown', (e) => { pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); }, true);
   wrap.addEventListener('pointerdown', (e) => {
     if (pts.size === 2 && lay) {
-      if (drag && drag.kind === 'brush') { const m = P().masks[S.selMask]; if (m) { m.strokes.pop(); brushCanv.delete(ph().id + ':' + m.id); invalidateBrush(); } }
+      pending = null; afterPinch = true;
+      if (drag) { clearTimeout(drag.hold); if (drag.swipe) slideStage(0, true); if (drag.holding) { S.compareHold = false; hideBadge(); } }
+      if (drag && drag.undo) drag.undo();
       drag = null; const pi = pinchInfo(); const ov = $('#ov').getBoundingClientRect(), wr = wrap.getBoundingClientRect();
       const [u0, v0, u1, v1] = lay.view;
       pinch = { ...pi, z0: S.zoom || (lay.w / lay.G.outW * lay.dpr), fit: lay.w / lay.G.outW * lay.dpr * (S.zoom ? 0 : 1) || null,
@@ -1524,16 +1536,27 @@ function setupStagePointer(wrap) {
     }
     if (S.compare === 'split' && Math.abs(px - S.split * lay.w) < 14 && !S.tool) { drag = { kind: 'split', start }; return; }
     if (!inside && S.tool !== 'crop') { drag = { kind: 'pan', start }; return; }
-    if (S.picking === 'maskColor') { pickMaskColor(u, v); updateHint(); return; }
-    if (S.tool === 'wb') { pickWB(u, v); setTool(null); return; }
-    if (S.tool === 'crop') { drag = cropDown(u, v, start); return; }
-    const s = Engine.outToSrc(lay.G, u, v);
-    if (S.tool === 'heal') { drag = healDown(s, start); return; }
-    if (S.tool === 'mask') { drag = maskDown(s, px, py, start, e); return; }
-    drag = { kind: 'pan', start };
+    touchTol = e.pointerType !== 'mouse';
+    // On touch, wait until the finger clearly taps or drags: a second finger arriving first means pinch/pan, not an edit.
+    if (e.pointerType !== 'mouse') { if (!afterPinch) pending = { u, v, px, py, start, ev: { altKey: e.altKey, shiftKey: e.shiftKey }, id: e.pointerId }; return; }
+    drag = runTool(u, v, px, py, start, e);
   });
+  function runTool(u, v, px, py, start, ev) {
+    if (S.picking === 'maskColor') { pickMaskColor(u, v); updateHint(); return null; }
+    if (S.tool === 'wb') { pickWB(u, v); setTool(null); return null; }
+    if (S.tool === 'crop') return cropDown(u, v, start);
+    const s = Engine.outToSrc(lay.G, u, v);
+    if (S.tool === 'heal') return healDown(s, start);
+    if (S.tool === 'mask') return maskDown(s, px, py, start, ev);
+    return { kind: 'pan', start };
+  }
   wrap.addEventListener('pointermove', (e) => {
     if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pending && e.pointerId === pending.id && !pinch) {
+      if (Math.hypot(e.clientX - pending.start.x, e.clientY - pending.start.y) < 10) return;
+      const p0 = pending; pending = null; drag = runTool(p0.u, p0.v, p0.px, p0.py, p0.start, p0.ev);
+      if (drag) drag.start.moved = true;
+    }
     if (pinch && pts.size >= 2) {
       const pi = pinchInfo(); let z = pinch.z0 * pi.d / Math.max(pinch.d, 1);
       if (z <= pinch.fit * 1.03) { S.zoom = 0; S.center = [0.5, 0.5]; }
@@ -1566,7 +1589,13 @@ function setupStagePointer(wrap) {
   });
   const up = (e) => {
     pts.delete(e.pointerId);
-    if (pinch) { if (pts.size < 2) { pinch = null; drawNavigator(); } drag = null; return; }
+    if (!pts.size) afterPinch = false;
+    if (pinch) { if (pts.size < 2) { pinch = null; drawNavigator(); renderEditLeft(); } drag = null; pending = null; return; }
+    if (pending && e.pointerId === pending.id) {
+      const p0 = pending; pending = null;
+      if (e.type !== 'pointerup') return;
+      drag = runTool(p0.u, p0.v, p0.px, p0.py, p0.start, p0.ev);
+    }
     if (!drag) return; const d = drag; drag = null;
     clearTimeout(d.hold);
     if (d.holding) { S.compareHold = false; hideBadge(); requestRender(); return; }
@@ -1598,7 +1627,7 @@ function cropDown(u, v, start) {
   const a = c0.angle * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
   const toL = (q) => { const dx = q[0] - c0.cx, dy = q[1] - c0.cy; return [ca * dx + sa * dy, -sa * dx + ca * dy]; };
   const L0 = toL(toQ(u, v));
-  const tol = 16 / lay.w * 2 * hw0 * (lay.view[2] - lay.view[0]);
+  const tol = (touchTol ? 30 : 16) / lay.w * 2 * hw0 * (lay.view[2] - lay.view[0]);
   const nx = Math.abs(Math.abs(L0[0]) - c0.hw) < tol, ny = Math.abs(Math.abs(L0[1]) - c0.hh) < tol;
   const inX = Math.abs(L0[0]) < c0.hw + tol, inY = Math.abs(L0[1]) < c0.hh + tol;
   let mode;
@@ -1651,7 +1680,8 @@ function spotDrag(sp, what, s0, start, created) {
       if (what === 'both') { sp.tx = o.tx + dx; sp.ty = o.ty + dy; sp.sx = o.sx + dx; sp.sy = o.sy + dy; }
       requestRender();
     },
-    up() { if (created || start.moved) commit(created ? 'Add spot' : 'Move spot'); }
+    up() { if (created || start.moved) commit(created ? 'Add spot' : 'Move spot'); },
+    undo() { const p = P(); if (created) { const i = p.spots.indexOf(sp); if (i >= 0) p.spots.splice(i, 1); S.selSpot = -1; } else Object.assign(sp, o); requestRender(); renderEditRight(); }
   };
 }
 function maskDown(s, px, py, start, ev) {
@@ -1665,7 +1695,7 @@ function maskDown(s, px, py, start, ev) {
     m.geom = { cx: s[0], cy: s[1], rx: 0.05, ry: 0.05, angle: 0, feather: 50 };
     return { kind: 'mk', start, move(u, v) { const q = Engine.outToSrc(lay.G, u, v); m.geom.rx = Math.max(0.01, Math.abs(q[0] - s[0]) * A); m.geom.ry = Math.max(0.01, Math.abs(q[1] - s[1])); if (!ev.shiftKey && false) m.geom.ry = m.geom.rx; requestRender(); }, up() { if (!start.moved) { m.geom.rx = 0.25; m.geom.ry = 0.25; } S.maskCreate = null; commit('Radial gradient'); renderEditRight(); updateHint(); requestRender(); } };
   }
-  const near = (su, sv) => { const [x, y] = srcToPx(su, sv); return Math.hypot(x - px, y - py) < 14; };
+  const near = (su, sv) => { const [x, y] = srcToPx(su, sv); return Math.hypot(x - px, y - py) < (touchTol ? 28 : 14); };
   if (m.type === 'linear') {
     const g0 = U.clone(m.geom); let which = near(g0.x0, g0.y0) ? 'a' : near(g0.x1, g0.y1) ? 'b' : 'both';
     return { kind: 'mk', start, move(u, v) { const q = Engine.outToSrc(lay.G, u, v), dx = q[0] - s[0], dy = q[1] - s[1];
@@ -1693,7 +1723,8 @@ function maskDown(s, px, py, start, ev) {
       for (let k = 1; k <= n; k++) st.pts.push(last[0] + (q[0] - last[0]) * k / n, last[1] + (q[1] - last[1]) * k / n);
       last = [st.pts[st.pts.length - 2], st.pts[st.pts.length - 1]];
       drawDabs(ent.ctx, st, from, bw, bh); paint(); hover = { src: q, alt: ev.altKey }; },
-      up() { commit(st.e ? 'Erase brush' : 'Brush'); } };
+      up() { commit(st.e ? 'Erase brush' : 'Brush'); },
+      undo() { const i = m.strokes.indexOf(st); if (i >= 0) m.strokes.splice(i, 1); brushCanv.delete(ph().id + ':' + m.id); invalidateBrush(); requestRender(); } };
   }
   return null;
 }
