@@ -446,6 +446,7 @@ function renderLibCenter() {
     h('button', { class: 'btn sm monly', id: 'selAll', hidden: !S.selectMode, onclick: () => { const list = visiblePhotos(); const all = list.length && list.every(p => S.sel.has(p.id)); S.sel = all ? new Set() : new Set(list.map(p => p.id)); renderGrid(); renderLibRight(); renderStrip(); updateSelBtns(); } }, 'All'),
     h('button', { class: 'btn sm monly' + (S.selectMode ? ' on' : ''), id: 'selBtn', onclick: () => setSelectMode(!S.selectMode) }, S.selectMode ? 'Done' : 'Select'));
   const grid = h('div', { class: 'grid', id: 'grid', style: { '--cell': f.cell + 'px' } });
+  grid.addEventListener('pointerdown', () => { suppressCellClick = false; }, true);
   C.append(bar, grid, h('div', { class: 'selbar', id: 'selbar', hidden: true }));
   setupDrop(C);
   renderGrid();
@@ -473,7 +474,7 @@ function renderGrid() {
     const ed = isEdited(p.edits);
     const cell = h('div', { class: 'cell' + (S.sel.has(p.id) ? ' sel' : '') + (S.cur === p.id ? ' cur' : '') + (p.flag === -1 ? ' rej' : ''), tabindex: 0, draggable: isMobile() ? 'false' : 'true', 'data-id': p.id,
       onclick: (e) => {
-        if (performance.now() < suppressCellClick) return;
+        if (suppressCellClick) { suppressCellClick = false; return; }
         if (isMobile()) { if (S.selectMode) toggleSel(p.id); else if (S.source.kind !== 'trash') { S.cur = p.id; S.sel = new Set([p.id]); setView('edit'); } else { setSelectMode(true); toggleSel(p.id); } return; }
         selectPhoto(p.id, e, list);
       },
@@ -490,11 +491,11 @@ function renderGrid() {
         p.raw ? h('span', { class: 'tag', text: 'RAW' }) : null,
         p.virtual ? h('span', { class: 'tag', text: 'COPY' }) : null,
         ed ? h('span', { class: 'tag ed', text: 'EDITED' }) : null));
-    longPress(cell, () => { suppressCellClick = performance.now() + 700; buzz(10); if (!S.selectMode) setSelectMode(true); if (!S.sel.has(p.id)) toggleSel(p.id); });
+    longPress(cell, () => { suppressCellClick = true; buzz(10); if (!S.selectMode) setSelectMode(true); if (!S.sel.has(p.id)) toggleSel(p.id); });
     grid.append(cell);
   }
 }
-let suppressCellClick = 0;
+let suppressCellClick = false; // swallows only the click that ends a long press; any new touch clears it
 function longPress(el, fn) {
   let t = null, x = 0, y = 0;
   el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; x = e.clientX; y = e.clientY; clearTimeout(t); t = setTimeout(fn, 450); });
@@ -512,7 +513,10 @@ function setSelectMode(on) {
   renderGrid(); renderLibRight(); renderStrip(); renderTabbar();
 }
 function toggleSel(id) {
-  S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); S.cur = id;
+  const removing = S.sel.has(id);
+  removing ? S.sel.delete(id) : S.sel.add(id); S.cur = id;
+  // like other photo apps: deselecting the last photo leaves select mode, so the next tap opens the photo again
+  if (removing && !S.sel.size && isMobile() && S.selectMode) { setSelectMode(false); return; }
   const c = document.querySelector(`.cell[data-id="${id}"]`); if (c) c.classList.toggle('sel', S.sel.has(id));
   const n = $('#libCount'); if (n) n.textContent = `${visiblePhotos().length} of ${live().length} · ${selIds().length} selected`;
   renderSelBar(); renderLibRight(); renderStrip(); updateSelBtns();
@@ -551,7 +555,7 @@ function renderSelBar() {
   document.body.classList.add('hasbar');
   bar.innerHTML = '';
   bar.append(h('div', { class: 'sbhead' }, h('b', { text: `${ids.length} selected` }),
-    h('button', { class: 'btn sm ghost', onclick: () => { S.sel = new Set(); renderGrid(); renderLibRight(); renderStrip(); updateSelBtns(); } }, 'Clear')));
+    h('button', { class: 'btn sm ghost', onclick: () => { if (isMobile() && S.selectMode) { setSelectMode(false); return; } S.sel = new Set(); renderGrid(); renderLibRight(); renderStrip(); updateSelBtns(); } }, 'Clear')));
   const acts = h('div', { class: 'sbacts' });
   if (trash) acts.append(ibtn('restore', 'Restore', () => restorePhotos(ids)), ibtn('trash', 'Delete forever', () => purgeDlg(ids), 'danger'));
   else {
