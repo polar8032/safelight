@@ -335,3 +335,26 @@ U.decodeRaw = async function (buf, maxSide) {
   } catch (e) { return null; }
   finally { try { raw.dispose(); } catch (e) {} }
 };
+
+/* ---------- ZIP reader (stored entries, as written by U.zip) ---------- */
+U.unzip = async function (blob) {
+  const tailLen = Math.min(blob.size, 65558);
+  const tail = new DataView(await blob.slice(blob.size - tailLen).arrayBuffer());
+  let eocd = -1;
+  for (let i = tailLen - 22; i >= 0; i--) if (tail.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('This is not a zip file.');
+  const count = tail.getUint16(eocd + 10, true), cdSize = tail.getUint32(eocd + 12, true), cdOff = tail.getUint32(eocd + 16, true);
+  const cd = new DataView(await blob.slice(cdOff, cdOff + cdSize).arrayBuffer());
+  const dec = new TextDecoder(); const out = new Map(); let p = 0;
+  for (let k = 0; k < count; k++) {
+    if (cd.getUint32(p, true) !== 0x02014b50) break;
+    const method = cd.getUint16(p + 10, true), csize = cd.getUint32(p + 20, true), nlen = cd.getUint16(p + 28, true), xlen = cd.getUint16(p + 30, true), clen = cd.getUint16(p + 32, true), loff = cd.getUint32(p + 42, true);
+    const name = dec.decode(new Uint8Array(cd.buffer, cd.byteOffset + p + 46, nlen));
+    p += 46 + nlen + xlen + clen;
+    const lh = new DataView(await blob.slice(loff, loff + 30).arrayBuffer());
+    const start = loff + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+    if (method !== 0) continue; // only stored entries (Safelight backups are stored)
+    out.set(name, blob.slice(start, start + csize));
+  }
+  return out;
+};

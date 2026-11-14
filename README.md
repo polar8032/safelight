@@ -5,7 +5,9 @@ A photo library and non-destructive photo editor that runs entirely in the brows
 ## Features
 
 - **Library:** import or drag and drop, star ratings, pick/reject flags, color labels, keywords, titles and captions, camera metadata, search and filters, albums and smart albums (rename, delete, drag photos onto them), virtual copies.
-- **Organizing:** select several photos (Ctrl/Shift-click or right-click on desktop; Select or long-press on phones) and use the action bar to rate, flag, label, add to or remove from an album, export or delete. Deleted photos go to Recently deleted with Undo, and are removed for good after 30 days unless restored.
+- **Organizing:** select several photos (Ctrl/Shift-click or right-click on desktop; Select or long-press on phones) and use the action bar to rate, flag, label, add to or remove from an album, export or delete. Deleted photos go to Recently deleted with Undo, and are removed for good after 30 days unless restored. Compare 2–4 photos side by side to pick the best, and group the grid by capture date.
+- **Backup:** save your whole library (originals, edits, ratings, albums, presets, LUTs) as one .zip and restore it on this or another device. Safelight also asks the browser to protect its storage from automatic cleanup.
+- **Share:** in the installed app on phones, export straight to the share sheet (Photos, messages, social apps).
 - **Editing:** white balance (auto and pick-a-neutral), auto tone, exposure, contrast, highlights, shadows, whites, blacks, texture, clarity, dehaze, vibrance, saturation.
 - **Advanced editing:** point and region tone curves, per-color hue/saturation/luminance, black-and-white mix, color-grading wheels, sharpening and noise reduction, lens corrections, perspective transform, vignette, grain, calibration.
 - **Tools:** crop with auto straighten, healing, cloning, red-eye removal, and up to 8 masks per photo (linear, radial, brush, brightness range, color range).

@@ -271,6 +271,24 @@ textarea { resize: vertical; width: 100%; }
 /* selection action bar */
 .selbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 14px; background: var(--raise); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px 8px 14px; box-shadow: 0 14px 40px rgba(0,0,0,.45); max-width: calc(100% - 24px); animation: popIn .24s cubic-bezier(.2,.8,.2,1) both; }
 .selbar[hidden] { display: none; }
+@keyframes barOut { to { opacity: 0; transform: translate(-50%, 12px); } }
+.selbar.leaving { animation: barOut .18s ease both; pointer-events: none; }
+.dayhead { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; padding: 14px 2px 2px; font-weight: 600; color: var(--fg); }
+.dayhead:first-child { padding-top: 0; }
+.dayhead .n { font: 11px var(--f-num); color: var(--faint); font-weight: 400; }
+.dayhead .btn { margin-left: auto; }
+/* compare view */
+.cmpview { position: fixed; inset: 0; z-index: 55; background: var(--bg); display: flex; flex-direction: column; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); animation: fadeIn .2s ease both; }
+.cmpview.out { animation: fadeIn .18s ease reverse both; }
+.cmpbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+.cmpgrid { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; }
+.cmpgrid.n2 { grid-template-columns: 1fr 1fr; } .cmpgrid.n3 { grid-template-columns: 1fr 1fr 1fr; } .cmpgrid.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.cmppane { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; background: var(--stage); border-radius: 10px; padding: 8px; border: 2px solid transparent; transition: border-color .2s, opacity .2s; animation: popIn .25s cubic-bezier(.2,.8,.2,1) both; }
+.cmppane.pick { border-color: var(--accent); } .cmppane.rej { opacity: .5; }
+.cmpimgwrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.cmpimg { max-width: 100%; max-height: 100%; object-fit: contain; display: block; animation: fadeIn .3s ease both; }
+.cmpinfo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cmpname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
 .sbhead { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .sbacts { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .sbacts::-webkit-scrollbar { display: none; }
@@ -383,10 +401,16 @@ textarea { resize: vertical; width: 100%; }
   .tabbar button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
   body.hasbar .toast { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+  @keyframes barOutM { to { opacity: 0; transform: translateY(14px); } }
+  .selbar.leaving { animation: barOutM .18s ease both; }
+  .cmpgrid.n2, .cmpgrid.n3, .cmpgrid.n4 { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); overflow-y: auto; }
+  .cmpgrid.n4, .cmpgrid.n3 { grid-template-columns: 1fr 1fr; }
+  .cmpinfo .stars button { font-size: 18px; padding: 0 3px; }
   .selbar { left: 8px; right: 8px; transform: none; bottom: 8px; max-width: none; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; border-radius: 16px; animation: fadeUp .24s cubic-bezier(.2,.8,.2,1) both; }
   .sbhead { justify-content: space-between; padding: 0 6px; }
-  .sbacts { justify-content: space-around; }
-  .sbtn { min-width: 56px; padding: 6px 6px; }
+  .sbacts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow: visible; }
+  .sbtn { min-width: 0; padding: 6px 2px; font-size: 10.5px; }
+  .sbtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .li .x { opacity: 1 !important; padding: 4px 8px; font-size: 15px; }
   .albums .li { padding: 6px; } .li .cov { width: 44px; height: 44px; }
   .li { min-height: 44px; }

@@ -211,6 +211,7 @@ async function importFiles(files, opts = {}) {
   }
   busy.remove();
   S.lastImport = batch;
+  if (!opts.sample && navigator.storage && navigator.storage.persist && !inFrame) navigator.storage.persist().catch(() => {});
   if (!opts.sample) toast(`Imported ${done} photo${done === 1 ? '' : 's'}${failed ? `, ${failed} could not be read` : ''}.`);
   const first = S.photos.find(p => p.batch === batch);
   if (first) { S.cur = first.id; S.sel = new Set([first.id]); }
@@ -276,7 +277,7 @@ function section(id, title, body, opts = {}) {
   el.dataset.tab = SEC_TAB[id] || 'none';
   return el;
 }
-const SEC_TAB = { catalog: 'albums', cols: 'albums', kw: 'albums', quick: 'info', meta: 'info', pcols: 'info', pact: 'info',
+const SEC_TAB = { catalog: 'albums', cols: 'albums', kw: 'albums', backup: 'albums', quick: 'info', meta: 'info', pcols: 'info', pact: 'info',
   presets: 'looks', basic: 'light', curve: 'color', mixer: 'color', grading: 'color', calibration: 'color', effects: 'effects', detail: 'detail', lens: 'detail', transform: 'detail',
   croptool: 'tools', healtool: 'tools', masktool: 'tools', snaps: 'history', hist: 'history', photoAct: 'history' };
 
@@ -314,7 +315,74 @@ function renderLibLeft() {
   const kw = {}; lp.forEach(p => p.keywords.forEach(k => kw[k] = (kw[k] || 0) + 1));
   const kws = Object.keys(kw).sort();
   setTimeout(applyMobile, 0);
+  const stor = h('div', { class: 'empty', id: 'storInfo', style: { padding: 0 } });
+  L.append(section('backup', 'Backup & storage', [stor,
+    h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: backupDlg }, 'Back up library'), h('button', { class: 'btn sm', onclick: () => $('#restoreIn').click() }, 'Restore backup'),
+      h('input', { type: 'file', id: 'restoreIn', accept: '.zip,application/zip', hidden: true, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) restoreBackup(f); } }))]));
+  updateStorageInfo();
   L.append(section('kw', 'Keywords', h('div', { class: 'list' }, kws.length ? kws.map(k => item(k, { kind: 'kw', id: k }, kw[k])) : h('div', { class: 'empty', text: 'Keywords you add to photos appear here.' }))));
+}
+async function updateStorageInfo() {
+  const el = $('#storInfo'); if (!el) return;
+  let txt = U.DB.persistent ? 'Your library is saved in this browser on this device.' : 'This browser is not saving your library. Back up before closing the page.';
+  try {
+    if (navigator.storage && navigator.storage.estimate) { const est = await navigator.storage.estimate(); txt += ` Using ${(est.usage / 1048576).toFixed(0)} MB.`; }
+    if (navigator.storage && navigator.storage.persisted) {
+      const pers = await navigator.storage.persisted();
+      el.textContent = txt + (pers ? ' Protected from automatic cleanup.' : ' ');
+      if (!pers && U.DB.persistent) el.append(h('button', { class: 'btn sm ghost', style: { padding: '0 4px' }, onclick: async () => { const ok = await navigator.storage.persist().catch(() => false); toast(ok ? 'Storage protected: the browser will not clear your library to free space.' : 'The browser did not allow protected storage here. Install the app or back up regularly.', 4500); updateStorageInfo(); } }, 'Protect storage'));
+      return;
+    }
+  } catch (e) {}
+  el.textContent = txt;
+}
+function backupDlg() {
+  const lp = S.photos; const withOrig = h('input', { type: 'checkbox', id: 'bkOrig', checked: true });
+  const status = h('div', { class: 'empty', style: { padding: 0 }, text: `${lp.length} photo${lp.length === 1 ? '' : 's'}, ${S.collections.length} album${S.collections.length === 1 ? '' : 's'}, ${S.userPresets.length} preset${S.userPresets.length === 1 ? '' : 's'} and ${S.luts.length} LUT${S.luts.length === 1 ? '' : 's'}.` });
+  const d = dialog('Back up library', [h('p', { style: { margin: 0, lineHeight: 1.5 }, text: 'Saves one .zip file with your photos, every edit, ratings, keywords, albums, presets and LUTs. Restore it here or on another device.' }),
+    h('label', { class: 'chk' }, withOrig, 'Include original photo files (needed to restore on another device)'), status], 'Save backup', async () => {
+    d.ok.disabled = true;
+    const files = [];
+    const meta = { app: 'Safelight', version: 1, exportedAt: Date.now(), photos: S.photos, collections: S.collections, presets: S.userPresets, luts: S.luts };
+    files.push({ name: 'safelight.json', blob: new Blob([JSON.stringify(meta)], { type: 'application/json' }) });
+    if (withOrig.checked) {
+      const ids = [...new Set(S.photos.map(p => p.imageId))]; let i = 0;
+      for (const id of ids) { i++; status.textContent = `Adding original ${i} of ${ids.length}…`; const rec = await U.DB.get('images', id); if (rec && rec.blob) files.push({ name: `images/${id}`, blob: rec.blob }); }
+      files.push({ name: 'images.json', blob: new Blob([JSON.stringify(ids.map(id => ({ id })))], { type: 'application/json' }) });
+    }
+    for (const l of S.luts) { const rec = await U.DB.get('luts', l.id); if (rec) files.push({ name: `luts/${l.id}.bin`, blob: new Blob([rec.data instanceof Float32Array ? rec.data : new Float32Array(rec.data)]) }); }
+    status.textContent = 'Packing…';
+    const zip = await U.zip(files);
+    const name = `safelight-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+    const r = await saveFile(name, zip);
+    status.textContent = r.ok ? `Saved ${name} (${(zip.size / 1048576).toFixed(1)} MB).` : r.msg;
+    d.ok.disabled = false;
+    if (r.ok) { try { localStorage.setItem('safelight.lastBackup', String(Date.now())); } catch (e) {} toast('Backup saved.'); }
+    return false;
+  });
+}
+async function restoreBackup(file) {
+  const busy = showBusy('Reading backup…');
+  try {
+    const entries = await U.unzip(file);
+    const mf = entries.get('safelight.json'); if (!mf) throw new Error('This zip is not a Safelight backup.');
+    const meta = JSON.parse(await mf.text());
+    let added = 0, skipped = 0, missing = 0;
+    for (const p of meta.photos || []) {
+      if (S.photos.some(x => x.id === p.id)) { skipped++; continue; }
+      const have = await U.DB.get('images', p.imageId);
+      if (!have) { const b = entries.get('images/' + p.imageId); if (!b) { missing++; continue; } await U.DB.put('images', { id: p.imageId, blob: new File([b], p.name, { type: p.raw ? 'application/octet-stream' : (b.type || 'image/jpeg') }), raw: !!p.raw, name: p.name }); }
+      S.photos.push(p); await U.DB.put('photos', p); added++;
+    }
+    for (const c of meta.collections || []) { const ex = S.collections.find(x => x.id === c.id); if (ex) { if (!ex.smart) ex.photos = [...new Set([...ex.photos, ...(c.photos || [])])]; await U.DB.put('collections', ex); } else { S.collections.push(c); await U.DB.put('collections', c); } }
+    for (const pr of meta.presets || []) if (!S.userPresets.some(x => x.id === pr.id)) { S.userPresets.push(pr); await U.DB.put('presets', pr); }
+    for (const l of meta.luts || []) {
+      if (S.luts.some(x => x.id === l.id)) continue; const b = entries.get(`luts/${l.id}.bin`); if (!b) continue;
+      const data = new Float32Array(await b.arrayBuffer()); await U.DB.put('luts', { id: l.id, name: l.name, size: l.size, data }); engine.registerLut(l.id, l.size, data); S.luts.push({ id: l.id, name: l.name, size: l.size });
+    }
+    busy.remove(); S.source = { kind: 'all' }; renderAll();
+    toast(`Restored ${added} photo${added === 1 ? '' : 's'}${skipped ? `, ${skipped} already here` : ''}${missing ? `, ${missing} skipped because the backup has no original file` : ''}.`, 6000);
+  } catch (e) { busy.remove(); toast('Could not restore: ' + e.message, 5000); }
 }
 function renameAlbumDlg(c) {
   const name = h('input', { type: 'text', id: 'albName', value: c.name });
@@ -371,9 +439,11 @@ function renderLibCenter() {
     sel('libRating', [[0, 'Any rating'], [1, '★ and up'], [2, '★★ and up'], [3, '★★★ and up'], [4, '★★★★ and up'], [5, '★★★★★']], f.rating, v => f.rating = +v),
     sel('libFlag', [['all', 'All flags'], ['pick', 'Picks'], ['none', 'Unflagged'], ['reject', 'Rejected']], f.flag, v => f.flag = v),
     sel('libLabel', [['any', 'Any label'], ...Object.keys(LABELS).map(k => [k, k[0].toUpperCase() + k.slice(1)])], f.label, v => f.label = v),
-    sel('libSort', [['capture', 'Sort: capture time'], ['import', 'Sort: import order'], ['name', 'Sort: file name'], ['rating', 'Sort: rating']], f.sort, v => f.sort = v),
+    sel('libSort', [['capture', 'Sort: capture time'], ['import', 'Sort: import order'], ['name', 'Sort: file name'], ['rating', 'Sort: rating']], f.sort, v => { f.sort = v; savePrefs(); }),
     h('input', { type: 'range', id: 'libSize', min: 120, max: 320, value: f.cell, style: { width: '90px' }, 'aria-label': 'Thumbnail size', oninput: (e) => { f.cell = +e.target.value; $('#grid').style.setProperty('--cell', f.cell + 'px'); } }),
     h('span', { class: 'count', id: 'libCount' }),
+    h('label', { class: 'chk donly', title: 'Show date headings (when sorted by capture time)' }, h('input', { type: 'checkbox', id: 'libGroup', checked: !!f.group, onchange: (e) => { f.group = e.target.checked; savePrefs(); renderGrid(); } }), 'By date'),
+    h('button', { class: 'btn sm monly', id: 'selAll', hidden: !S.selectMode, onclick: () => { const list = visiblePhotos(); const all = list.length && list.every(p => S.sel.has(p.id)); S.sel = all ? new Set() : new Set(list.map(p => p.id)); renderGrid(); renderLibRight(); renderStrip(); updateSelBtns(); } }, 'All'),
     h('button', { class: 'btn sm monly' + (S.selectMode ? ' on' : ''), id: 'selBtn', onclick: () => setSelectMode(!S.selectMode) }, S.selectMode ? 'Done' : 'Select'));
   const grid = h('div', { class: 'grid', id: 'grid', style: { '--cell': f.cell + 'px' } });
   C.append(bar, grid, h('div', { class: 'selbar', id: 'selbar', hidden: true }));
@@ -390,7 +460,16 @@ function renderGrid() {
       S.source.kind === 'trash' ? 'Nothing here. Deleted photos stay here for 30 days before they are removed for good.' : live().length ? 'No photos match these filters.' : 'Drop photos here, or use Import. JPEG, PNG, WebP and camera RAW files all work.'));
     return;
   }
+  const grouped = S.filter.group && S.filter.sort === 'capture' && list.length > 1;
+  const dayKey = (t) => { const d = new Date(t); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); };
+  let lastDay = null;
   for (const p of list) {
+    if (grouped && dayKey(p.captureAt) !== lastDay) {
+      lastDay = dayKey(p.captureAt); const day = lastDay;
+      const dayIds = list.filter(x => dayKey(x.captureAt) === day).map(x => x.id);
+      grid.append(h('div', { class: 'dayhead' }, h('span', { text: new Date(p.captureAt).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }), h('span', { class: 'n', text: dayIds.length }),
+        h('button', { class: 'btn sm ghost', onclick: () => { if (isMobile() && !S.selectMode) setSelectMode(true); const all = dayIds.every(id => S.sel.has(id)); dayIds.forEach(id => all ? S.sel.delete(id) : S.sel.add(id)); if (!S.sel.size && !isMobile() && S.cur) S.sel.add(S.cur); renderGrid(); renderLibRight(); renderStrip(); updateSelBtns(); } }, 'Select day')));
+    }
     const ed = isEdited(p.edits);
     const cell = h('div', { class: 'cell' + (S.sel.has(p.id) ? ' sel' : '') + (S.cur === p.id ? ' cur' : '') + (p.flag === -1 ? ' rej' : ''), tabindex: 0, draggable: isMobile() ? 'false' : 'true', 'data-id': p.id,
       onclick: (e) => {
@@ -428,14 +507,21 @@ function setSelectMode(on) {
   if (!on && S.cur && !isMobile()) S.sel.add(S.cur);
   document.body.classList.toggle('selmode', on);
   const b = $('#selBtn'); if (b) { b.textContent = on ? 'Done' : 'Select'; b.classList.toggle('on', on); }
+  const a = $('#selAll'); if (a) a.hidden = !on;
+  updateSelBtns();
   renderGrid(); renderLibRight(); renderStrip(); renderTabbar();
 }
 function toggleSel(id) {
   S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); S.cur = id;
   const c = document.querySelector(`.cell[data-id="${id}"]`); if (c) c.classList.toggle('sel', S.sel.has(id));
   const n = $('#libCount'); if (n) n.textContent = `${visiblePhotos().length} of ${live().length} · ${selIds().length} selected`;
-  renderSelBar(); renderLibRight(); renderStrip();
+  renderSelBar(); renderLibRight(); renderStrip(); updateSelBtns();
 }
+function updateSelBtns() {
+  const a = $('#selAll'); if (!a) return; const list = visiblePhotos();
+  a.textContent = list.length && list.every(p => S.sel.has(p.id)) ? 'None' : 'All';
+}
+function savePrefs() { try { localStorage.setItem('safelight.filter', JSON.stringify({ sort: S.filter.sort, cell: S.filter.cell, group: !!S.filter.group })); } catch (e) {} }
 /* ---- selection action bar ---- */
 const AICON = {
   star: '<path d="M10 2.5l2.3 4.8 5.2.7-3.8 3.6.9 5.2L10 14.3l-4.6 2.5.9-5.2-3.8-3.6 5.2-.7z"/>',
@@ -447,29 +533,33 @@ const AICON = {
   restore: '<path d="M4 10a6 6 0 1 0 2-4.5"/><path d="M4 3v3h3"/>',
   copy: '<rect x="6" y="6" width="10" height="10" rx="1.5"/><path d="M4 13V4h9"/>',
   minus: '<path d="M3 6h5l2 2h7v8H3z"/><path d="M8 12h4"/>',
-  all: '<rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 10l2 2 4-4"/>'
+  all: '<rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 10l2 2 4-4"/>',
+  compare: '<rect x="2.5" y="4" width="6.5" height="12" rx="1"/><rect x="11" y="4" width="6.5" height="12" rx="1"/>'
 };
 const ibtn = (icon, label, fn, cls) => h('button', { class: 'sbtn' + (cls ? ' ' + cls : ''), onclick: fn, title: label, 'aria-label': label, html: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${AICON[icon]}</svg><span>${label}</span>` });
 function renderSelBar() {
   const bar = $('#selbar'); if (!bar) return;
   const ids = selIds(), trash = S.source.kind === 'trash';
-  const show = isMobile() ? S.selectMode : ids.length > 0;
-  bar.hidden = !show; if (!show) { document.body.classList.remove('hasbar'); return; }
+  // phones: only in select mode and only once something is selected; desktop: when several are selected (one photo uses the side panel)
+  const show = isMobile() ? (S.selectMode && ids.length > 0) : ids.length >= (trash ? 1 : 2);
+  if (!show) {
+    document.body.classList.remove('hasbar');
+    if (!bar.hidden && !bar.classList.contains('leaving')) { bar.classList.add('leaving'); setTimeout(() => { bar.classList.remove('leaving'); if (bar.classList.contains('leaving') === false && !document.body.classList.contains('hasbar')) bar.hidden = true; }, 180); }
+    return;
+  }
+  bar.classList.remove('leaving'); bar.hidden = false;
   document.body.classList.add('hasbar');
   bar.innerHTML = '';
-  const none = !ids.length;
-  const list = visiblePhotos();
-  const allSel = list.length && list.every(p => S.sel.has(p.id));
-  bar.append(h('div', { class: 'sbhead' }, h('b', { text: ids.length ? `${ids.length} selected` : 'Tap photos to select' }),
-    h('button', { class: 'btn sm ghost', onclick: () => { S.sel = allSel ? new Set() : new Set(list.map(p => p.id)); renderGrid(); renderLibRight(); renderStrip(); } }, allSel ? 'Select none' : 'Select all')));
+  bar.append(h('div', { class: 'sbhead' }, h('b', { text: `${ids.length} selected` }),
+    h('button', { class: 'btn sm ghost', onclick: () => { S.sel = new Set(); renderGrid(); renderLibRight(); renderStrip(); updateSelBtns(); } }, 'Clear')));
   const acts = h('div', { class: 'sbacts' });
   if (trash) acts.append(ibtn('restore', 'Restore', () => restorePhotos(ids)), ibtn('trash', 'Delete forever', () => purgeDlg(ids), 'danger'));
   else {
     acts.append(ibtn('star', 'Rate', () => ratePicker(ids)), ibtn('flag', 'Flag', () => flagPicker(ids)), ibtn('label', 'Label', () => labelPicker(ids)), ibtn('album', 'Album', () => albumPicker(ids)));
+    if (ids.length >= 2 && ids.length <= 4) acts.append(ibtn('compare', 'Compare', () => compareView(ids)));
     if (S.source.kind === 'col') acts.append(ibtn('minus', 'Remove from album', () => removeFromAlbum(S.source.id, ids)));
     acts.append(ibtn('out', 'Export', () => exportDlg()), ibtn('trash', 'Delete', () => trashPhotos(ids), 'danger'));
   }
-  acts.querySelectorAll('button').forEach(b => b.disabled = none);
   bar.append(acts);
 }
 function ratePicker(ids) {
@@ -494,6 +584,39 @@ function removeFromAlbum(colId, ids) {
   S.sel = new Set(); renderAll();
   toast(`Removed ${ids.length} from “${c.name}”. The photos stay in your library.`, 4000, { label: 'Undo', fn: () => { c.photos = before; U.DB.put('collections', c); renderAll(); } });
 }
+async function compareView(ids) {
+  ids = ids.slice(0, 4);
+  const close = () => { ov.classList.add('out'); setTimeout(() => ov.remove(), 180); removeEventListener('keydown', key, true); renderAll(); };
+  const panes = h('div', { class: 'cmpgrid n' + ids.length });
+  const ov = h('div', { class: 'cmpview', role: 'dialog', 'aria-label': 'Compare photos' },
+    h('div', { class: 'cmpbar' }, h('b', { text: `Compare ${ids.length} photos` }), h('span', { class: 'empty', style: { padding: 0 }, text: 'Rate, pick or reject, then close.' }), h('span', { style: { flex: 1 } }), h('button', { class: 'btn', onclick: () => close() }, 'Done')), panes);
+  const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  addEventListener('keydown', key, true);
+  document.body.appendChild(ov);
+  for (const id of ids) {
+    const p = S.photos.find(x => x.id === id); if (!p) continue;
+    const cv = h('canvas', { class: 'cmpimg' }); const img0 = h('img', { class: 'cmpimg', src: p.thumb, alt: '' });
+    const info = h('div', { class: 'cmpinfo' });
+    const drawInfo = () => { info.innerHTML = ''; info.append(h('span', { class: 'cmpname', text: p.title || p.name }), stars(p, r => { p.rating = r; savePhoto(p); drawInfo(); }),
+      h('div', { class: 'seg' }, [[1, 'Pick'], [0, '—'], [-1, 'Reject']].map(([v, t]) => h('button', { class: p.flag === v ? 'on' : '', onclick: () => { p.flag = v; savePhoto(p); drawInfo(); pane.classList.toggle('rej', v === -1); pane.classList.toggle('pick', v === 1); } }, t)))); };
+    const pane = h('div', { class: 'cmppane' + (p.flag === -1 ? ' rej' : '') + (p.flag === 1 ? ' pick' : '') }, h('div', { class: 'cmpimgwrap' }, img0), info);
+    drawInfo(); panes.append(pane);
+  }
+  // render each at full quality for the pane size
+  await new Promise(r => setTimeout(r, 60));
+  const panesEls = [...panes.children];
+  for (let i = 0; i < ids.length; i++) {
+    const p = S.photos.find(x => x.id === ids[i]); const wrap = panesEls[i] && panesEls[i].querySelector('.cmpimgwrap'); if (!p || !wrap || !ov.isConnected) continue;
+    try {
+      const rec = await U.DB.get('images', p.imageId); const src = rec && await decodeSource(rec); if (!src || !ov.isConnected) continue;
+      const hd = engine.loadImage(src); const long = Math.round(Math.max(wrap.clientWidth, wrap.clientHeight) * Math.min(devicePixelRatio || 1, 2));
+      const id = engine.renderSmall(hd, p.edits, Math.max(200, Math.min(long, 2400)), buildBrush(p.edits, hd, 'x')); engine.freeImage(hd);
+      const c = h('canvas', { class: 'cmpimg' }); c.width = id.width; c.height = id.height; c.getContext('2d').putImageData(id, 0, 0);
+      wrap.innerHTML = ''; wrap.append(c);
+    } catch (e) { console.error(e); }
+  }
+  if (S.view === 'edit') requestRender();
+}
 function photoMenu(x, y) {
   document.querySelectorAll('.ctx').forEach(m => m.remove());
   const ids = selIds(), trash = S.source.kind === 'trash', p = ph();
@@ -502,6 +625,7 @@ function photoMenu(x, y) {
     ids.length === 1 ? it('Edit', () => setView('edit')) : null,
     it('Rate…', () => ratePicker(ids)), it('Flag…', () => flagPicker(ids)), it('Color label…', () => labelPicker(ids)),
     it('Add to album…', () => albumPicker(ids)), S.source.kind === 'col' ? it('Remove from album', () => removeFromAlbum(S.source.id, ids)) : null,
+    ids.length >= 2 && ids.length <= 4 ? it(`Compare ${ids.length}`, () => compareView(ids)) : null,
     ids.length === 1 && p ? it('Make virtual copy', () => virtualCopy(p)) : null,
     it('Copy settings', () => copyDlg('copy')), S.clip ? it(`Paste settings to ${ids.length}`, () => pasteSettings(ids)) : null,
     it(`Export ${ids.length}…`, () => exportDlg()), h('hr'), it(`Delete ${ids.length > 1 ? ids.length + ' photos' : 'photo'}`, () => trashPhotos(ids), 'danger')]);
@@ -1935,6 +2059,7 @@ function exportDlg() {
   const wmPos = h('select', { id: 'exWmPos' }, [['br', 'Bottom right'], ['bl', 'Bottom left'], ['tr', 'Top right'], ['tl', 'Top left'], ['c', 'Centre']].map(([v, t]) => h('option', { value: v, text: t }))); wmPos.value = prefs.wmPos || 'br';
   const wmSize = h('input', { type: 'range', id: 'exWmSize', min: 1, max: 10, step: 0.5, value: prefs.wmSize || 3 });
   const wmOp = h('input', { type: 'range', id: 'exWmOp', min: 10, max: 100, value: prefs.wmOp || 70 });
+  const shareBox = canShareFiles() ? h('input', { type: 'checkbox', id: 'exShare', checked: !!prefs.share }) : null;
   const status = h('div', { class: 'empty', style: { padding: 0 }, text: ids.length > 1 ? `${ids.length} photos will be saved together as one .zip file.` : 'One photo will be exported.' });
   const d = dialog(`Export ${ids.length} photo${ids.length === 1 ? '' : 's'}`, [
     h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', { text: 'Format' }), fmt), h('label', { class: 'field' }, h('span', { text: 'Size' }), size)),
@@ -1943,8 +2068,9 @@ function exportDlg() {
     h('div', { class: 'sub', text: 'Watermark' }),
     h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', { text: 'Text (leave empty for none)' }), wm), h('label', { class: 'field' }, h('span', { text: 'Position' }), wmPos)),
     h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', { text: 'Size' }), wmSize), h('label', { class: 'field' }, h('span', { text: 'Opacity' }), wmOp)),
+    shareBox ? h('label', { class: 'chk' }, shareBox, 'Share to another app (Photos, messages, social) instead of saving a file') : null,
     status], 'Export', async () => {
-    const o = { fmt: fmt.value, q: +q.value, size: size.value, name: name.value, wm: wm.value, wmPos: wmPos.value, wmSize: +wmSize.value, wmOp: +wmOp.value };
+    const o = { fmt: fmt.value, q: +q.value, size: size.value, name: name.value, wm: wm.value, wmPos: wmPos.value, wmSize: +wmSize.value, wmOp: +wmOp.value, share: !!(shareBox && shareBox.checked) };
     try { localStorage.setItem('safelight.export', JSON.stringify(o)); } catch (e) {}
     d.ok.disabled = true; await runExport(ids, o, status); d.ok.disabled = false; return false;
   });
@@ -1985,14 +2111,28 @@ async function runExport(ids, o, status) {
   if (!files.length) { status.textContent = 'Nothing could be exported.'; return; }
   const out = files.length === 1 ? files[0] : { name: `safelight-export-${new Date().toISOString().slice(0, 10)}.zip`, blob: await U.zip(files) };
   status.textContent = `Saving ${out.name} (${(out.blob.size / 1048576).toFixed(1)} MB)…`;
+  if (o.share && canShareFiles()) {
+    try { await navigator.share({ files: files.map(f => new File([f.blob], f.name, { type: f.blob.type })), title: 'Safelight export' }); status.textContent = 'Shared.'; return; }
+    catch (e) { if (e && e.name === 'AbortError') { status.textContent = 'Sharing cancelled.'; return; } }
+  }
+  const r = await saveFile(out.name, out.blob);
+  status.textContent = r.ok ? `Saved ${out.name}.` : r.msg;
+  if (r.ok) toast(`Exported ${files.length} photo${files.length === 1 ? '' : 's'}.`);
+}
+const inFrame = (() => { try { return window.top !== window; } catch (e) { return true; } })();
+function canShareFiles() {
+  if (inFrame || !navigator.canShare) return false;
+  try { return navigator.canShare({ files: [new File([new Blob(['x'], { type: 'image/jpeg' })], 'x.jpg', { type: 'image/jpeg' })] }); } catch (e) { return false; }
+}
+async function saveFile(name, blob) {
   const dl = window.claude && window.claude.use ? await Promise.race([window.claude.use('downloads'), new Promise(r => setTimeout(() => r(null), 3000))]) : null;
   if (dl) {
-    try { await dl.save({ filename: out.name, data: out.blob }); status.textContent = `Saved ${out.name}.`; toast(`Exported ${files.length} photo${files.length === 1 ? '' : 's'}.`); }
-    catch (e) { status.textContent = e && e.code === 'declined' ? 'Save cancelled.' : e && e.code === 'too_large' ? 'That file is too large to save here. Try a smaller size.' : `The file could not be saved (${e && e.code || 'error'}).`; }
-    return;
+    try { await dl.save({ filename: name, data: blob }); return { ok: true }; }
+    catch (e) { return { ok: false, msg: e && e.code === 'declined' ? 'Save cancelled.' : e && e.code === 'too_large' ? 'That file is too large to save here. Try a smaller size.' : `The file could not be saved (${e && e.code || 'error'}).` }; }
   }
-  const a = h('a', { href: URL.createObjectURL(out.blob), download: out.name }); document.body.appendChild(a); a.click(); a.remove();
-  status.textContent = `Saved ${out.name}. If nothing downloaded, this view does not allow saving files.`;
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: name }); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return { ok: true };
 }
 
 /* ============================== keyboard ============================== */
@@ -2053,6 +2193,7 @@ async function start() {
   S.collections = await U.DB.all('collections');
   S.userPresets = await U.DB.all('presets');
   for (const l of await U.DB.all('luts')) { try { engine.registerLut(l.id, l.size, l.data instanceof Float32Array ? l.data : new Float32Array(l.data)); S.luts.push({ id: l.id, name: l.name, size: l.size }); } catch (e) { console.error(e); } }
+  try { Object.assign(S.filter, JSON.parse(localStorage.getItem('safelight.filter') || '{}')); } catch (e) {}
   const meta = await U.DB.get('meta', 'state');
   if (meta) { S.lastImport = meta.lastImport; }
   $('#mLib').onclick = () => setView('library'); $('#mEdit').onclick = () => setView('edit');
