@@ -92,7 +92,7 @@ void main(){
 const MAIN_FS = COMMON + `
 uniform sampler2D uGV, uB1, uB2, uB3, uLut, uBrA, uBrB;
 uniform vec2 uVpx; uniform vec2 uOutPx; uniform float uViewScale;
-uniform vec4 uP0, uP1, uP2, uP3, uP4, uP5, uP6, uP7, uP8, uP9, uP10, uP11;
+uniform vec4 uP0, uP1, uP2, uP3, uP4, uP5, uP6, uP7, uP8, uP9, uP10, uP11, uP12;
 uniform highp sampler3D uLut3; uniform vec2 uLut3P;
 uniform float uBW; uniform float uShTint; uniform mat3 uCal;
 uniform vec4 uHsl[8];
@@ -163,6 +163,11 @@ void main(){
     cs /= 9.0; float lc = lumW(cs)+1e-5; vec3 cn = cs*(lumW(lin)/lc); lin = mix(lin, cn, uP4.y);
   }
 
+  if(uP12.x>0.0){
+    float dd = abs(ouv.y-uP12.y); float tw = smoothstep(uP12.z, uP12.z+max(uP12.w,0.01), dd);
+    vec3 bl = mix(b2, b3, 0.45*tw);
+    lin = mix(lin, bl, clamp(tw*uP12.x,0.0,1.0));
+  }
   vec2 suv = qToSrc(outToQ(ouv));
   vec2 p = (suv-0.5)*vec2(uAs,1.0);
   vec3 vin = toS3(lin); float Lin = lumW(vin); vec3 hsvIn = rgb2hsv(clamp(vin,0.0,1.0));
@@ -543,6 +548,7 @@ function create(canvas) {
     gl.uniform4f(loc.uP10, ((p.leakHue == null ? 25 : p.leakHue) % 360) / 360, n(p.leakPos || 0), n(p.border || 0), n(p.borderBottom || 0));
     const BC = { white: [0.97, 0.97, 0.96], cream: [0.93, 0.9, 0.82], black: [0.02, 0.02, 0.02] }[p.borderColor] || [0.97, 0.97, 0.96];
     gl.uniform4f(loc.uP11, BC[0], BC[1], BC[2], 0);
+    gl.uniform4f(loc.uP12, n(p.tilt || 0), (p.tiltPos == null ? 50 : p.tiltPos) / 100, (p.tiltWidth == null ? 15 : p.tiltWidth) / 100, (p.tiltFeather == null ? 20 : p.tiltFeather) / 100);
     const L3 = p.lut && luts.get(p.lut.id);
     bindTex(7, null); gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_3D, L3 ? L3.tex : dummy3); gl.uniform1i(loc.uLut3, 7);
     gl.uniform2f(loc.uLut3P, L3 ? (p.lut.amount == null ? 1 : p.lut.amount / 100) : 0, L3 ? L3.size : 2);

@@ -15,7 +15,7 @@ function defaults() {
     sharpen: 0, sharpRadius: 1, sharpDetail: 25, sharpMask: 0, nrLum: 0, nrDetail: 50, nrColor: 0,
     distortion: 0, lensVig: 0, lensVigMid: 50, caRed: 0, caBlue: 0, defPurple: 0, defGreen: 0,
     tVert: 0, tHorz: 0, tRot: 0, tAspect: 0, tScale: 100, tX: 0, tY: 0,
-    vig: 0, vigMid: 50, vigRound: 0, vigFeather: 50, vigHigh: 0, grain: 0, grainSize: 25, grainRough: 50, grainColor: 0, halation: 0, glow: 0, letterbox: 0, lut: null, flare: 0, fade: 0, leak: 0, leakHue: 25, leakPos: 60, damage: 0, border: 0, borderBottom: 0, borderColor: 'white',
+    vig: 0, vigMid: 50, vigRound: 0, vigFeather: 50, vigHigh: 0, grain: 0, grainSize: 25, grainRough: 50, grainColor: 0, halation: 0, glow: 0, letterbox: 0, lut: null, flare: 0, fade: 0, leak: 0, leakHue: 25, leakPos: 60, damage: 0, border: 0, borderBottom: 0, borderColor: 'white', tilt: 0, tiltPos: 50, tiltWidth: 15, tiltFeather: 20,
     calShadow: 0, calRH: 0, calRS: 0, calGH: 0, calGS: 0, calBH: 0, calBS: 0,
     crop: null, orient: 0, flipH: false, flipV: false,
     masks: [], spots: [], look: null
@@ -33,7 +33,7 @@ const GROUPS = {
   detail: ['Detail', ['sharpen', 'sharpRadius', 'sharpDetail', 'sharpMask', 'nrLum', 'nrDetail', 'nrColor']],
   lens: ['Lens corrections', ['distortion', 'lensVig', 'lensVigMid', 'caRed', 'caBlue', 'defPurple', 'defGreen']],
   transform: ['Transform', ['tVert', 'tHorz', 'tRot', 'tAspect', 'tScale', 'tX', 'tY']],
-  effects: ['Effects', ['vig', 'vigMid', 'vigRound', 'vigFeather', 'vigHigh', 'grain', 'grainSize', 'grainRough', 'grainColor', 'halation', 'glow', 'letterbox', 'flare', 'fade', 'leak', 'leakHue', 'leakPos', 'damage', 'border', 'borderBottom', 'borderColor']],
+  effects: ['Effects', ['vig', 'vigMid', 'vigRound', 'vigFeather', 'vigHigh', 'grain', 'grainSize', 'grainRough', 'grainColor', 'halation', 'glow', 'letterbox', 'flare', 'fade', 'leak', 'leakHue', 'leakPos', 'damage', 'border', 'borderBottom', 'borderColor', 'tilt', 'tiltPos', 'tiltWidth', 'tiltFeather']],
   lut: ['LUT', ['lut']],
   calibration: ['Calibration', ['calShadow', 'calRH', 'calRS', 'calGH', 'calGS', 'calBH', 'calBS']],
   crop: ['Crop & orientation', ['crop', 'orient', 'flipH', 'flipV']],
@@ -53,6 +53,33 @@ const CRV = (rgb, r, g, b) => ({ rgb: rgb || [[0, 0], [1, 1]], r: r || [[0, 0], 
 const FADE = (lo, hi) => [[0, lo], [0.25, 0.25 + lo * 0.4], [0.75, 0.75 - (1 - hi) * 0.3], [1, hi]];
 const SOFT_S = [[0, 0], [0.25, 0.22], [0.75, 0.79], [1, 1]];
 const HARD_S = [[0, 0], [0.22, 0.15], [0.5, 0.5], [0.78, 0.86], [1, 1]];
+/* Look finder tags: describe what you saw (mood, light, feel, genre, colors) instead of naming a film. */
+const TAG_GROUPS = [
+  ['Mood', ['warm', 'cold', 'neutral']],
+  ['Light', ['day', 'night', 'golden']],
+  ['Feel', ['gritty', 'dreamy', 'clean', 'vintage', 'dark', 'bright', 'pastel', 'neon']],
+  ['Genre', ['thriller', 'action', 'sci-fi', 'romance', 'horror', 'western', 'drama', 'comedy', 'fantasy', 'war', 'noir', 'documentary', 'music-video']],
+  ['Colors', ['teal-orange', 'teal', 'blue', 'green', 'yellow', 'magenta', 'sepia', 'bw', 'splash']]
+];
+const LOOK_TAGS = {
+  'Portrait 400': 'warm clean pastel day', 'Everyday 200': 'warm day clean', 'Slide 50': 'day clean bright', 'Expired Stock': 'vintage warm dreamy', 'Seventies Print': 'vintage warm yellow',
+  'Pastel Negative': 'pastel bright dreamy', 'Cool Matte': 'cold pastel', 'Instant Print': 'vintage dreamy warm', 'Super 8': 'vintage warm gritty', 'Cross Process': 'vintage green yellow',
+  'Light Leak Dream': 'dreamy warm vintage', 'Contact Sheet': 'vintage clean', 'Home Video 90s': 'vintage gritty music-video', '80s Video Tape': 'vintage gritty music-video magenta',
+  'Teal & Orange': 'action teal-orange warm', 'Tungsten Night': 'night cold teal thriller', 'Bleach Bypass': 'war gritty thriller dark', 'Day for Night': 'night blue cold thriller dark',
+  'Neon Noir': 'night neon noir sci-fi magenta', 'Golden Epic': 'golden warm fantasy action', 'Desert Bleach': 'western warm gritty yellow day', 'Emerald Thriller': 'thriller green dark',
+  'Anamorphic Night': 'night sci-fi blue thriller cold', 'Summer Blockbuster': 'action bright teal-orange day', 'Moonlight Blue': 'night blue cold drama', 'Western Dust': 'western warm vintage gritty sepia',
+  'Arthouse Fade': 'drama pastel dreamy', 'Dread': 'horror dark green', 'Cold Future': 'sci-fi cold teal clean', 'Red Planet': 'sci-fi warm yellow', 'Three-Strip': 'vintage bright drama',
+  'Neon Rain': 'night sci-fi magenta neon dreamy', 'Silver Screen': 'bw noir vintage', 'Old Reel': 'bw vintage sepia gritty',
+  'Teal Night Chase': 'thriller action night cold teal-orange gritty', 'Spy Steel': 'thriller cold blue clean', 'Romance Glow': 'romance warm dreamy golden', 'Desert Haze': 'sci-fi warm dreamy golden yellow',
+  'Neon City': 'sci-fi night neon magenta teal', 'Sun-Baked Yellow': 'thriller drama warm yellow gritty day', 'War Grit': 'war gritty green dark', 'Superhero Punch': 'action bright clean teal-orange',
+  'Fantasy Gold': 'fantasy warm golden dreamy', 'Candlelit Period': 'drama warm dark vintage night', 'Pastel Storybook': 'comedy pastel bright vintage dreamy', 'Zombie Green': 'horror green dark gritty',
+  'Cold Case': 'thriller cold teal clean', 'Deep Sea Teal': 'sci-fi cold teal', 'Western Sunset': 'western warm golden', 'Arctic Thriller': 'thriller cold bright blue',
+  'Bleached Memory': 'drama dreamy vintage bright', 'Documentary Natural': 'documentary clean neutral day', 'Music Video Haze': 'music-video pastel dreamy magenta',
+  'Classic 400': 'bw gritty vintage', 'Fine Grain 100': 'bw clean', 'Pushed 3200': 'bw gritty dark', 'Red Filter': 'bw dark', 'Infrared Glow': 'bw dreamy', 'Film Noir': 'bw noir dark',
+  'Sepia Print': 'bw sepia vintage', 'Cyanotype': 'bw blue vintage', 'Lith Print': 'bw gritty vintage', 'Silver Gelatin': 'bw clean', 'Selenium Print': 'bw vintage', 'Soft Matte Mono': 'bw pastel dreamy',
+  'Punch': 'bright', 'Golden Hour': 'golden warm', 'Blue Hour': 'night blue cold', 'Clean Neutral': 'clean neutral', 'Nocturne': 'night dark', 'Soft Skin': 'dreamy', 'High Key': 'bright', 'Low Key': 'dark',
+  'Clear Air': 'clean day', 'Green Season': 'green day', 'Red Splash': 'splash', 'Blue Splash': 'splash blue', 'Yellow Splash': 'splash yellow', 'Duotone Teal & Rose': 'teal magenta pastel', 'Duotone Indigo & Gold': 'blue yellow'
+};
 const BUILTIN = [
   /* ---- colour film emulations (original looks, descriptive names) ---- */
   ['Film · Color', 'Portrait 400', { contrast: -6, highlights: -12, curve: CRV(FADE(0.035, 0.98)), hslS: [-4, -8, -6, -10, 0, -6, 0, 0], hslL: [0, 6, 0, 0, 0, 0, 0, 0], ghH: 45, ghS: 10, gsH: 195, gsS: 6, grain: 18, grainSize: 30, halation: 8 }],
@@ -89,6 +116,31 @@ const BUILTIN = [
   ['Cinema', 'Neon Rain', { temp: -12, contrast: 20, saturation: 20, gsH: 240, gsS: 30, ghH: 300, ghS: 25, halation: 35, flare: 30, glow: 15, letterbox: 2.39 }],
   ['Cinema', 'Silver Screen', { bw: true, contrast: 30, glow: 15, grain: 25, vig: -25, letterbox: 1.37 }],
   ['Cinema', 'Old Reel', { bw: true, contrast: 20, gsH: 35, gsS: 15, ghH: 40, ghS: 10, damage: 60, grain: 50, grainRough: 80, fade: 25, vig: -40, glow: 10, letterbox: 1.37 }],
+  ['Cinema', 'Teal Night Chase', { temp: -15, contrast: 25, blacks: -15, gsH: 195, gsS: 35, ghH: 30, ghS: 15, halation: 15, letterbox: 2.39 }],
+  ['Cinema', 'Spy Steel', { temp: -12, saturation: -30, contrast: 20, clarity: 10, gsH: 205, gsS: 20, ghH: 200, ghS: 8, letterbox: 2.39 }],
+  ['Cinema', 'Romance Glow', { temp: 14, contrast: -10, highlights: -15, saturation: -5, glow: 25, fade: 10, ghH: 35, ghS: 20, gsH: 20, gsS: 8, letterbox: 1.85 }],
+  ['Cinema', 'Desert Haze', { temp: 25, saturation: -25, contrast: -5, dehaze: -20, fade: 15, ghH: 38, ghS: 30, gsH: 30, gsS: 20, letterbox: 2.39 }],
+  ['Cinema', 'Neon City', { contrast: 25, saturation: 25, gsH: 190, gsS: 35, ghH: 310, ghS: 30, halation: 30, glow: 15, flare: 15, letterbox: 2.39 }],
+  ['Cinema', 'Sun-Baked Yellow', { temp: 30, tint: -10, contrast: 25, saturation: -10, ghH: 50, ghS: 35, gsH: 45, gsS: 15, letterbox: 2.39 }],
+  ['Cinema', 'War Grit', { saturation: -55, contrast: 35, clarity: 25, tint: -10, gsH: 100, gsS: 12, grain: 30, letterbox: 1.85 }],
+  ['Cinema', 'Superhero Punch', { contrast: 30, vibrance: 30, clarity: 15, gsH: 210, gsS: 15, ghH: 35, ghS: 20, flare: 20, letterbox: 2.39 }],
+  ['Cinema', 'Fantasy Gold', { temp: 15, contrast: 10, vibrance: 10, glow: 20, ghH: 42, ghS: 28, gsH: 160, gsS: 15 }],
+  ['Cinema', 'Candlelit Period', { exposure: -0.3, temp: 22, contrast: 15, shadows: -10, ghH: 35, ghS: 25, gsH: 25, gsS: 10, vig: -30, grain: 15, letterbox: 1.85 }],
+  ['Cinema', 'Pastel Storybook', { contrast: -12, saturation: 10, hslL: [10, 10, 10, 0, 10, 5, 10, 10], hslS: [-10, 10, 10, -20, 0, -10, 10, 10], fade: 15, ghH: 30, ghS: 10, gsH: 330, gsS: 8 }],
+  ['Cinema', 'Zombie Green', { tint: -20, saturation: -40, contrast: 30, blacks: -15, gsH: 120, gsS: 25, ghH: 80, ghS: 10, vig: -35, grain: 20, letterbox: 2.39 }],
+  ['Cinema', 'Cold Case', { temp: -10, tint: -6, saturation: -25, contrast: 15, gsH: 180, gsS: 25, ghH: 190, ghS: 8 }],
+  ['Cinema', 'Deep Sea Teal', { temp: -30, tint: -10, saturation: 10, dehaze: 10, gsH: 185, gsS: 40, ghH: 175, ghS: 20, letterbox: 2.39 }],
+  ['Cinema', 'Western Sunset', { temp: 28, contrast: 25, saturation: 10, ghH: 30, ghS: 30, gsH: 20, gsS: 20, vig: -20, letterbox: 2.76 }],
+  ['Cinema', 'Arctic Thriller', { exposure: 0.2, temp: -25, saturation: -35, contrast: 10, fade: 8, gsH: 210, gsS: 20, letterbox: 2.39 }],
+  ['Cinema', 'Bleached Memory', { exposure: 0.4, saturation: -40, contrast: -15, glow: 25, fade: 25, ghH: 45, ghS: 12 }],
+  ['Cinema', 'Documentary Natural', { contrast: 6, vibrance: 8, highlights: -10, shadows: 8, sharpen: 20 }],
+  ['Cinema', 'Music Video Haze', { tint: 15, saturation: 10, glow: 30, fade: 20, flare: 10, ghH: 320, ghS: 20, gsH: 250, gsS: 20 }],
+  ['Film · Color', '80s Video Tape', { temp: 6, saturation: 20, texture: -45, caRed: 70, caBlue: -50, grain: 35, grainSize: 70, grainColor: 60, fade: 15, vig: -10 }],
+  ['Creative', 'Red Splash', { contrast: 15, hslS: [0, -100, -100, -100, -100, -100, -100, 0] }],
+  ['Creative', 'Blue Splash', { contrast: 15, hslS: [-100, -100, -100, -100, 0, 0, -100, -100] }],
+  ['Creative', 'Yellow Splash', { contrast: 15, hslS: [-100, 0, 0, -100, -100, -100, -100, -100] }],
+  ['Creative', 'Duotone Teal & Rose', { bw: true, contrast: 10, gsH: 190, gsS: 50, ghH: 340, ghS: 40 }],
+  ['Creative', 'Duotone Indigo & Gold', { bw: true, contrast: 15, gsH: 240, gsS: 50, ghH: 45, ghS: 45 }],
   /* ---- black & white film ---- */
   ['Film · B&W', 'Classic 400', { bw: true, contrast: 25, bwMix: [10, 10, 5, 0, -5, -15, -5, 0], grain: 32, grainSize: 35, grainRough: 55 }],
   ['Film · B&W', 'Fine Grain 100', { bw: true, contrast: 12, clarity: 8, curve: CRV(SOFT_S), grain: 10, grainSize: 15 }],
@@ -113,7 +165,7 @@ const BUILTIN = [
   ['Portrait', 'Low Key', { exposure: -0.5, contrast: 20, shadows: -15, blacks: -20, vig: -30, vigFeather: 70 }],
   ['Landscape', 'Clear Air', { dehaze: 22, clarity: 18, vibrance: 22, highlights: -25, shadows: 20, texture: 10 }],
   ['Landscape', 'Green Season', { hslH: [0, 0, -15, 10, 0, 0, 0, 0], hslS: [0, 0, 15, 20, 10, 10, 0, 0], hslL: [0, 0, 5, 5, 0, -10, 0, 0], vibrance: 12 }]
-].map(([group, name, values]) => ({ id: 'b:' + name, group, name, values, builtin: true }));
+].map(([group, name, values]) => ({ id: 'b:' + name, group, name, values, builtin: true, tags: LOOK_TAGS[name] || '' }));
 
 /* ============================== state ============================== */
 const S = {
@@ -1216,6 +1268,7 @@ function effectsPanel() {
     h('div', { class: 'sub', text: 'Light leak' }),
     pSlider('leak', 'Amount', 0, 100, 1, { fmt: v => v }), pSlider('leakHue', 'Color', 0, 360, 1, { fmt: v => v + '°', track: 'linear-gradient(90deg,red,yellow,lime,cyan,blue,magenta,red)' }), pSlider('leakPos', 'Position', -100, 100, 1),
     h('div', { class: 'sub', text: 'Film damage' }), pSlider('damage', 'Dust & scratches', 0, 100, 1, { fmt: v => v }),
+    h('div', { class: 'sub', text: 'Tilt-shift blur' }), pSlider('tilt', 'Blur', 0, 100, 1, { fmt: v => v }), pSlider('tiltPos', 'Focus line', 0, 100, 1, { fmt: v => v }), pSlider('tiltWidth', 'Sharp band', 2, 60, 1, { fmt: v => v }), pSlider('tiltFeather', 'Transition', 2, 60, 1, { fmt: v => v }),
     h('div', { class: 'sub', text: 'Border' }), pSlider('border', 'Size', 0, 100, 1, { fmt: v => v }), pSlider('borderBottom', 'Bottom extra', 0, 100, 1, { fmt: v => v }),
     h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Border color' }), h('div', { class: 'seg' }, [['white', 'White'], ['cream', 'Cream'], ['black', 'Black']].map(([k, t]) => h('button', { class: (e.borderColor || 'white') === k ? 'on' : '', onclick: () => { P().borderColor = k; commit('Border color'); renderEditRight(); requestRender(); } }, t)))),
     lutRow ? h('div', {}, h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'LUT: ' + lutRow.name }), h('button', { class: 'btn sm ghost', onclick: () => { P().lut = null; commit('Remove LUT'); renderEditRight(); requestRender(); } }, 'Remove')),
@@ -1321,9 +1374,28 @@ function newMask(type) {
   invalidateBrush(); renderEditRight(); requestRender();
   if (S.maskCreate) toast(type === 'linear' ? 'Drag across the photo: the effect is full where you start and fades out where you stop.' : 'Drag from the centre outwards to place the radial gradient.');
 }
+function quickMask(kind) {
+  const p = P(); if (p.masks.length >= 8) { toast('Up to 8 masks per photo.'); return; }
+  if (kind === 'dodge' || kind === 'burn') {
+    newMask('brush'); const m = p.masks[S.selMask]; m.name = kind === 'dodge' ? 'Dodge' : 'Burn'; m.adj.exposure = kind === 'dodge' ? 0.5 : -0.5; S.brush.erase = false;
+    commit(m.name); renderEditRight(); requestRender(); toast(`Paint over the areas to ${kind === 'dodge' ? 'brighten' : 'darken'}. Change the strength with Exposure.`); return;
+  }
+  const G = Engine.geom(img, p, false);
+  if (kind === 'sky') {
+    const a = Engine.outToSrc(G, 0.5, 0), b = Engine.outToSrc(G, 0.5, 0.62);
+    const m = { id: U.uid(), name: 'Sky', type: 'linear', invert: false, hidden: false, amount: 100, adj: Object.assign(maskAdj0(), { exposure: -0.3, highlights: -30, saturation: 15, dehaze: 15 }), range: { type: 'color', lo: 60, hi: 100, smooth: 15, hue: 210, tol: 55 }, strokes: [], geom: { x0: a[0], y0: a[1], x1: b[0], y1: b[1] } };
+    p.masks.push(m); S.selMask = p.masks.length - 1;
+  } else {
+    const c = Engine.outToSrc(G, 0.5, 0.5), F = Engine.frame(img, p);
+    const m = { id: U.uid(), name: 'Spotlight', type: 'radial', invert: true, hidden: false, amount: 100, adj: Object.assign(maskAdj0(), { exposure: -0.6 }), range: { type: 'none', lo: 60, hi: 100, smooth: 15, hue: 210, tol: 30 }, strokes: [], geom: { cx: c[0], cy: c[1], rx: G.crop[2] * 0.7, ry: G.crop[3] * 0.7, angle: 0, feather: 70 } };
+    p.masks.push(m); S.selMask = p.masks.length - 1;
+  }
+  invalidateBrush(); commit(kind === 'sky' ? 'Sky mask' : 'Spotlight'); renderEditRight(); requestRender();
+}
 function maskPanel() {
   const p = P(); const m = p.masks[S.selMask];
-  const body = [h('div', { class: 'row' }, ['linear', 'radial', 'brush', 'range'].map(t => h('button', { class: 'btn sm', onclick: () => newMask(t) }, '+ ' + { linear: 'Linear', radial: 'Radial', brush: 'Brush', range: 'Range' }[t])))];
+  const body = [h('div', { class: 'row' }, ['linear', 'radial', 'brush', 'range'].map(t => h('button', { class: 'btn sm', onclick: () => newMask(t) }, '+ ' + { linear: 'Linear', radial: 'Radial', brush: 'Brush', range: 'Range' }[t]))),
+    h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0 }, text: 'Quick' }), h('button', { class: 'btn sm', title: 'Paint to brighten areas', onclick: () => quickMask('dodge') }, 'Dodge'), h('button', { class: 'btn sm', title: 'Paint to darken areas', onclick: () => quickMask('burn') }, 'Burn'), h('button', { class: 'btn sm', title: 'Select the sky (blue areas near the top)', onclick: () => quickMask('sky') }, 'Sky'), h('button', { class: 'btn sm', title: 'Brighten the centre and darken the edges', onclick: () => quickMask('spot') }, 'Spotlight'))];
   if (!p.masks.length) body.push(h('div', { class: 'empty', text: 'Masks apply local adjustments. Add a gradient, paint with a brush, or select by brightness or color.' }));
   p.masks.forEach((mk, i) => body.push(h('div', { class: 'maskrow' + (i === S.selMask ? ' on' : ''), onclick: () => { S.selMask = i; S.maskCreate = null; renderEditRight(); requestRender(); } },
     h('span', { class: 't', text: mk.name + (mk.range.type !== 'none' && mk.type !== 'range' ? ' · ' + mk.range.type : '') }),
@@ -1436,7 +1508,7 @@ function renderHistory() {
   }
 }
 /* ============================== looks (presets, film looks, LUTs) ============================== */
-const allLooks = () => [...BUILTIN, ...S.userPresets.map(p => Object.assign({ group: 'My presets' }, p)), ...S.luts.map(l => ({ id: 'lut:' + l.id, group: 'LUTs', name: l.name, values: { lut: { id: l.id, amount: 100 } }, lutId: l.id }))];
+const allLooks = () => [...BUILTIN, ...S.userPresets.map(p => Object.assign({ group: 'My presets', tags: '' }, p)), ...S.luts.map(l => ({ id: 'lut:' + l.id, group: 'LUTs', name: l.name, values: { lut: { id: l.id, amount: 100 } }, lutId: l.id }))];
 const findLook = (id) => allLooks().find(l => l.id === id);
 const DISCRETE = new Set(['bw', 'letterbox', 'crop', 'orient', 'flipH', 'flipV', 'masks', 'spots', 'borderColor', 'look']);
 function mixVal(k, a, b, t) {
@@ -1459,6 +1531,10 @@ function applyLookTo(e, look, amount = 100) {
 function applyPreset(look) {
   const e = P(); if (!e) return;
   const target = applyLookTo(U.clone(e), look);
+  // the crop a look's bars replaced is remembered, so switching bar mode or removing the look gives it back
+  const before = e.look && e.look.cropBefore !== undefined ? e.look.cropBefore : e.crop;
+  if (look && look.values.letterbox) { target.crop = U.clone(before); adaptBars(target); if (target.look) target.look.cropBefore = U.clone(before); }
+  else target.crop = U.clone(before);
   animateEdits(target, look ? 'Look: ' + look.name : 'Remove look', () => renderEditLeft());
   setTimeout(() => { document.querySelectorAll('.look').forEach(b => b.classList.toggle('on', b.title === (look ? look.name : 'Original'))); }, 0);
 }
@@ -1467,6 +1543,7 @@ let editAnim = 0;
 function animateEdits(target, label, after, D = 340) {
   const e = P(); if (!e) return; cancelAnimationFrame(editAnim);
   const from = U.clone(e), keys = Object.keys(DEF).filter(k => !['masks', 'spots', 'look', 'crop', 'orient', 'flipH', 'flipV'].includes(k));
+  if (JSON.stringify(e.crop) !== JSON.stringify(target.crop)) { e.crop = U.clone(target.crop); layoutStage(); }
   e.look = target.look; const t0 = performance.now();
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const stepf = (now) => {
@@ -1495,7 +1572,7 @@ function pumpThumbs() {
     if (!el.isConnected) continue;
     if (lookThumbs.has(key)) { el.src = lookThumbs.get(key); continue; }
     try {
-      const e = applyLookTo(U.clone(P()), look);
+      const e = adaptBars(applyLookTo(U.clone(P()), look));
       e.masks = P().masks; e.spots = [];
       const id = engine.renderSmall(img, e, 150, currentBrush());
       const c = document.createElement('canvas'); c.width = id.width; c.height = id.height; c.getContext('2d').putImageData(id, 0, 0);
@@ -1510,28 +1587,137 @@ function looksSection() {
   const looks = allLooks();
   const groups = [...new Set(looks.map(l => l.group))];
   if (!S.lookGroup || !groups.includes(S.lookGroup)) S.lookGroup = groups[0];
-  const chips = h('div', { class: 'chips', role: 'tablist' }, groups.map(g => h('button', { class: 'chip' + (S.lookGroup === g ? ' on' : ''), role: 'tab', onclick: () => { S.lookGroup = g; renderEditLeft(); } }, g)));
+  S.lookTags = S.lookTags || new Set(); S.lookQ = S.lookQ || '';
+  const finding = S.lookTags.size > 0 || S.lookQ.trim().length > 0;
+  const chips = h('div', { class: 'chips', role: 'tablist' }, groups.map(g => h('button', { class: 'chip' + (!finding && S.lookGroup === g ? ' on' : ''), role: 'tab', onclick: () => { S.lookGroup = g; S.lookTags.clear(); S.lookQ = ''; renderEditLeft(); } }, g)));
   const base = stripLook(U.clone(e)); base.spots = [];
-  const bkey = p.id + '|' + strHash(JSON.stringify(base));
+  const bkey = p.id + '|' + barsMode() + '|' + strHash(JSON.stringify(base));
   const tiles = [];
   const tile = (look, label) => {
     const im = h('img', { alt: '', src: p.thumb });
     const on = look ? (e.look && e.look.id === look.id) : !e.look;
     const b = h('button', { class: 'look' + (on ? ' on' : ''), title: label, onclick: () => { if (performance.now() - lastPanelScroll < 180) return; applyPreset(look); } }, h('span', { class: 'lim' }, im), h('span', { class: 'ln', text: label }),
-      look && (look.group === 'My presets' || look.lutId) ? h('span', { class: 'lx', role: 'button', 'aria-label': 'Delete ' + label, onclick: (ev) => { ev.stopPropagation(); deleteLook(look); } }, '×') : null);
+      look && !look.builtin ? h('span', { class: 'lx', role: 'button', 'aria-label': 'Delete ' + label, onclick: (ev) => { ev.stopPropagation(); deleteLook(look); } }, '×') : null);
     tiles.push({ look, el: im, key: bkey + '|' + (look ? look.id + '|' + strHash(JSON.stringify(look.values)) : 'none') });
     return b;
   };
-  const list = looks.filter(l => l.group === S.lookGroup);
-  const grid = h('div', { class: 'looks' }, tile(null, 'Original'), list.map(l => tile(l, l.name)));
+  // finder: free-text search + "describe what you saw" tags (all selected tags must match)
+  const q = S.lookQ.trim().toLowerCase();
+  const matches = (l) => { const t = (l.tags || '') + ' ' + l.group.toLowerCase(); if ([...S.lookTags].some(tag => !t.split(/\s+/).includes(tag))) return false; return !q || (l.name + ' ' + t).toLowerCase().includes(q); };
+  const list = finding ? looks.filter(matches) : looks.filter(l => l.group === S.lookGroup);
+  const grid = h('div', { class: 'looks' }, finding ? null : tile(null, 'Original'), list.map(l => tile(l, l.name)));
+  const search = h('input', { type: 'search', id: 'lookQ', placeholder: 'Search looks: night, warm, thriller…', value: S.lookQ, 'aria-label': 'Search looks',
+    oninput: (ev) => { S.lookQ = ev.target.value; clearTimeout(looksSection.t); looksSection.t = setTimeout(() => { const pos = ev.target.selectionStart; renderEditLeft(); const el = $('#lookQ'); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) {} } }, 250); } });
+  let open = false; try { open = localStorage.getItem('safelight.finder') === '1'; } catch (er) {}
+  const finder = h('details', { class: 'finder', open: open || S.lookTags.size > 0, ontoggle: (ev) => { try { localStorage.setItem('safelight.finder', ev.target.open ? '1' : '0'); } catch (er) {} } },
+    h('summary', {}, 'Describe the look you saw', S.lookTags.size ? h('span', { class: 'tagn', text: S.lookTags.size }) : null),
+    h('div', { class: 'tagwrap' }, TAG_GROUPS.map(([g, tags]) => h('div', { class: 'taggrp' }, h('span', { class: 'tg', text: g }),
+      h('div', { class: 'tagchips' }, tags.map(t => h('button', { class: 'chip sm' + (S.lookTags.has(t) ? ' on' : ''), 'aria-pressed': S.lookTags.has(t) ? 'true' : 'false', onclick: () => { S.lookTags.has(t) ? S.lookTags.delete(t) : S.lookTags.add(t); renderEditLeft(); } }, t.replace('-', ' ')))))),
+      finding ? h('div', { class: 'row' }, h('span', { class: 'empty', style: { padding: 0, flex: 1 }, text: list.length ? `${list.length} look${list.length === 1 ? '' : 's'} match` : 'No look matches all of these. Remove a tag, or try Match from a picture.' }), h('button', { class: 'btn sm ghost', onclick: () => { S.lookTags.clear(); S.lookQ = ''; renderEditLeft(); } }, 'Clear')) : null));
   const cur = e.look && findLook(e.look.id);
   const amt = cur ? h('div', { class: 'lookamt' }, h('div', { class: 'row' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Look: ' + cur.name }), h('button', { class: 'btn sm ghost', onclick: () => applyPreset(null) }, 'Remove')),
     slider('s-lookAmt', 'Intensity', 0, 150, 1, () => P().look ? P().look.amount : 100, setLookAmount, { def: 100, fmt: v => v + '%', onCommit: () => commit('Look intensity ' + Math.round(P().look.amount) + '%') })) : null;
   const lutIn = h('input', { type: 'file', accept: '.cube', hidden: true, multiple: true, onchange: (ev) => { importLuts(ev.target.files); ev.target.value = ''; } });
-  const sec = section('presets', 'Looks', [amt, chips, grid,
+  const refIn = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) matchLookFrom(f); } });
+  const bars = h('div', { class: 'row barsrow' }, h('span', { class: 'sub', style: { margin: 0, flex: 1 }, text: 'Cinema bars' }),
+    h('div', { class: 'seg', role: 'group', 'aria-label': 'Cinema bars' }, [['bars', 'Bars'], ['crop', 'Crop'], ['off', 'Off']].map(([k, t]) => h('button', { class: barsMode() === k ? 'on' : '', title: { bars: 'Black bars like a cinema screen', crop: 'Crop the photo to the widescreen shape instead', off: 'Keep the full photo' }[k], onclick: () => setBarsMode(k) }, t))));
+  const sec = section('presets', 'Looks', [amt,
+    h('button', { class: 'btn matchbtn', onclick: () => refIn.click() }, h('span', { html: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="4" width="15" height="12" rx="1.5"/><path d="M2.5 13l4-4 3 3 2-2 6 5"/><circle cx="13.5" cy="7.5" r="1.3"/></svg>' }),
+      h('span', { class: 'mt' }, h('b', { text: 'Match a look from a picture' }), h('small', { text: 'Use a screenshot of a scene you like' })), refIn),
+    search, finder, chips, grid, bars,
     h('div', { class: 'row', style: { marginTop: '6px' } }, h('button', { class: 'btn sm', onclick: savePresetDlg }, '+ Save as preset'), h('button', { class: 'btn sm', onclick: () => lutIn.click() }, 'Import LUT (.cube)'), lutIn)], { open: true });
   setTimeout(() => queueLookThumbs(tiles), 30);
   return sec;
+}
+/* cinema bars: keep black bars, crop to the widescreen shape instead, or switch them off */
+function barsMode() { try { return localStorage.getItem('safelight.bars') || 'bars'; } catch (e) { return 'bars'; } }
+function setBarsMode(m) {
+  try { localStorage.setItem('safelight.bars', m); } catch (e) {}
+  const e = P(); const look = e && e.look && findLook(e.look.id);
+  if (look && look.values.letterbox) applyPreset(look); else renderEditLeft();
+}
+function adaptBars(e) {
+  const mode = barsMode(); if (mode === 'bars' || !e.letterbox) return e;
+  const r = +e.letterbox; e.letterbox = 0;
+  if (mode === 'crop' && img) {
+    const F = Engine.frame(img, e); const fa = F.hw / F.hh; let hw, hh;
+    if (fa > r) { hh = F.hh; hw = hh * r; } else { hw = F.hw; hh = hw / r; }
+    e.crop = { cx: 0, cy: 0, hw, hh, angle: 0 };
+  }
+  return e;
+}
+/* ---- Match a look from a picture: measure a reference still and translate it into Safelight settings ---- */
+function imageStats(data, W, H, skipBars) {
+  const lum = (i) => (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+  let top = 0, bot = 0;
+  if (skipBars) {
+    const rowDark = (y) => { let s = 0, mx = 0; for (let x = 0; x < W; x += 2) { const l = lum((y * W + x) * 4); s += l; mx = Math.max(mx, l); } return s / (W / 2) < 0.05 && mx < 0.16; };
+    while (top < H * 0.3 && rowDark(top)) top++;
+    while (bot < H * 0.3 && rowDark(H - 1 - bot)) bot++;
+    if (top < H * 0.03 || bot < H * 0.03) { top = 0; bot = 0; }
+  }
+  const Ls = [], zones = { s: [0, 0, 0, 0], m: [0, 0, 0, 0], h: [0, 0, 0, 0], a: [0, 0, 0, 0] }; let chroma = 0, n = 0, cen = 0, cn = 0, cor = 0, kn = 0;
+  const y0 = top, y1 = H - bot, ch = y1 - y0;
+  for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255, L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    Ls.push(L); n++;
+    const c = [r - L, g - L, b - L]; chroma += Math.hypot(c[0], c[1], c[2]);
+    const z = L < 0.3 ? zones.s : L > 0.68 ? zones.h : zones.m;
+    for (const zz of [z, zones.a]) { zz[0] += c[0]; zz[1] += c[1]; zz[2] += c[2]; zz[3]++; }
+    const dx = (x / W - 0.5) * 2, dy = ((y - y0) / ch - 0.5) * 2, d = Math.hypot(dx, dy);
+    if (d < 0.45) { cen += L; cn++; } else if (d > 1.15) { cor += L; kn++; }
+  }
+  Ls.sort((a, b) => a - b); const pc = (q) => Ls[Math.min(Ls.length - 1, Math.floor(q * Ls.length))];
+  const avg = (z) => z[3] ? [z[0] / z[3], z[1] / z[3], z[2] / z[3]] : [0, 0, 0];
+  return { p02: pc(0.02), p25: pc(0.25), p50: pc(0.5), p75: pc(0.75), p98: pc(0.98), sat: chroma / Math.max(n, 1), tint: { s: avg(zones.s), m: avg(zones.m), h: avg(zones.h), a: avg(zones.a) },
+    vig: cn && kn ? (cor / kn) / Math.max(cen / cn, 0.01) : 1, bars: top || bot ? W / Math.max(1, ch) : 0 };
+}
+function tintToWheel(d, weight) {
+  // find the wheel hue whose colour pushes most in direction d, and the amount needed
+  let best = null;
+  for (let hh = 0; hh < 360; hh += 3) {
+    const c = U.hsv2rgb(hh / 360, 1, 1), L = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], u = [c[0] - L, c[1] - L, c[2] - L];
+    const uu = u[0] * u[0] + u[1] * u[1] + u[2] * u[2], proj = (u[0] * d[0] + u[1] * d[1] + u[2] * d[2]) / Math.sqrt(uu);
+    if (!best || proj > best.proj) best = { hh, proj, uu };
+  }
+  const amt = best.proj / Math.sqrt(best.uu) / (0.3 * weight);
+  return { h: best.hh, s: Math.round(U.clamp(amt * 100, 0, 55)) };
+}
+async function matchLookFrom(file) {
+  if (!img || !P()) return;
+  const busy = showBusy('Reading the colours of your picture…');
+  try {
+    const bmp = await createImageBitmap(file);
+    const sc = Math.min(1, 320 / Math.max(bmp.width, bmp.height)); const W = Math.max(8, Math.round(bmp.width * sc)), H = Math.max(8, Math.round(bmp.height * sc));
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0, W, H); bmp.close();
+    const ref = imageStats(g.getImageData(0, 0, W, H).data, W, H, true);
+    const base = stripLook(U.clone(P())); base.masks = P().masks;
+    const pid = engine.renderSmall(img, base, 320, currentBrush()); requestRender();
+    const ph0 = imageStats(pid.data, pid.width, pid.height, false);
+    const v = {};
+    v.exposure = Math.round(U.clamp(Math.log2(Math.max(U.toLin(ref.p50), 1e-3) / Math.max(U.toLin(ph0.p50), 1e-3)) * 0.45, -1, 1) * 100) / 100;
+    const rs = (ref.p75 - ref.p25) / Math.max(ph0.p75 - ph0.p25, 0.02);
+    v.contrast = Math.round(U.clamp((rs - 1) * 140, -60, 60));
+    if (ref.p02 > ph0.p02 + 0.03) v.fade = Math.round(U.clamp((ref.p02 - ph0.p02) / 0.1 * 60, 0, 60));
+    if (ref.p98 < 0.9) v.whites = Math.round(U.clamp((ref.p98 - Math.min(ph0.p98, 0.98)) / 0.25 * 100, -70, 0));
+    if (ref.sat < 0.012) { v.bw = true; }
+    else { const r = ref.sat / Math.max(ph0.sat, 0.01); v.saturation = Math.round(U.clamp((r - 1) * 90, -80, 50)); }
+    const diff = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const glob = diff(ref.tint.a, ph0.tint.a);
+    const gw = tintToWheel(glob, 1); v.ggH = gw.h; v.ggS = Math.round(gw.s * 0.6);
+    const sub = (d) => diff(d, glob.map(x => x * 0.6));
+    const sw = tintToWheel(sub(diff(ref.tint.s, ph0.tint.s)), 0.55); v.gsH = sw.h; v.gsS = sw.s;
+    const hw = tintToWheel(sub(diff(ref.tint.h, ph0.tint.h)), 0.55); v.ghH = hw.h; v.ghS = hw.s;
+    const mw = tintToWheel(sub(diff(ref.tint.m, ph0.tint.m)), 0.4); v.gmH = mw.h; v.gmS = Math.round(mw.s * 0.7);
+    if (ref.vig < ph0.vig - 0.08) v.vig = Math.round(U.clamp((ref.vig - ph0.vig) * 160, -60, 0));
+    if (ref.bars > 1.5) { const snaps = [1.66, 1.85, 2, 2.2, 2.39, 2.76]; const near = snaps.reduce((a, b) => Math.abs(b - ref.bars) < Math.abs(a - ref.bars) ? b : a); v.letterbox = Math.abs(near - ref.bars) < 0.12 ? near : Math.round(ref.bars * 100) / 100; }
+    const name = 'Matched: ' + file.name.replace(/\.[^.]+$/, '').slice(0, 28);
+    const pr = { id: U.uid(), group: 'My looks', name, values: v, tags: 'matched' + (v.bw ? ' bw' : '') };
+    S.userPresets.push(pr); await U.DB.put('presets', pr);
+    busy.remove(); S.lookGroup = 'My looks'; S.lookTags && S.lookTags.clear(); S.lookQ = '';
+    applyPreset(Object.assign({ builtin: false }, pr));
+    toast(`Matched the look${v.letterbox ? ' and its widescreen bars' : ''}. It's saved under My looks, and the Intensity slider tones it down.`, 5000);
+  } catch (e) { busy.remove(); console.error(e); toast('That picture could not be read. Try a JPEG or PNG screenshot.', 4000); }
 }
 function deleteLook(look) {
   confirmDlg(`Delete “${look.name}”?`, 'Delete', async () => {
